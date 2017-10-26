@@ -1,0 +1,15 @@
+---
+hosts:
+  - hostname: server1
+    ip: x.x.x.x
+    user: ubuntu
+    role: [etcd,controlplane]
+    sudo: true
+
+services:
+  etcd:
+    version: latest
+    image: quay.io/coreos/etcd
+  kubeapi:
+    version: v1.7.5_coreos.0
+    image: quay.io/coreos/hyperkube
