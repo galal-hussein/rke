@@ -1,15 +1,26 @@
 ---
 hosts:
-  - hostname: server1
-    ip: x.x.x.x
+  - hostname: srv1
+    ip: 1.1.1.1
     user: ubuntu
-    role: [etcd,controlplane]
+    role: [etcd]
+    sudo: true
+  - hostname: srv2
+    ip: 2.2.2.2
+    user: ubuntu
+    role: [controlplane]
     sudo: true
 
 services:
   etcd:
     version: latest
     image: quay.io/coreos/etcd
-  kubeapi:
+  kube-api:
+    version: v1.7.5_coreos.0
+    image: quay.io/coreos/hyperkube
+  kube-controller:
+    version: v1.7.5_coreos.0
+    image: quay.io/coreos/hyperkube
+  scheduler:
     version: v1.7.5_coreos.0
     image: quay.io/coreos/hyperkube

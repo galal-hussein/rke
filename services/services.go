@@ -5,14 +5,18 @@ type Container struct {
 }
 
 type Services struct {
-	Etcd    Etcd    `yaml:"etcd"`
-	KubeAPI KubeAPI `yaml:"kubeapi"`
+	Etcd           Etcd           `yaml:"etcd"`
+	KubeAPI        KubeAPI        `yaml:"kube-api"`
+	KubeController KubeController `yaml:"kube-controller"`
+	Scheduler      Scheduler      `yaml:"scheduler"`
 }
 
 const (
-	ETCDRole             = "etcd"
-	MasterRole           = "controlplane"
-	WorkerRole           = "worker"
-	KubeAPIContainerName = "kubeapi"
-	EtcdContainerName    = "etcd"
+	ETCDRole                    = "etcd"
+	MasterRole                  = "controlplane"
+	WorkerRole                  = "worker"
+	KubeAPIContainerName        = "kube-api"
+	KubeControllerContainerName = "kube-controller"
+	SchedulerContainerName      = "scheduler"
+	EtcdContainerName           = "etcd"
 )

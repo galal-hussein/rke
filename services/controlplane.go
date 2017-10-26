@@ -14,7 +14,15 @@ func RunControlPlane(masterHosts []hosts.Host, etcdHosts []hosts.Host, masterSer
 			return err
 		}
 		// run kubecontroller
+		err = runKubeController(host, masterServices.KubeController)
+		if err != nil {
+			return err
+		}
 		// run scheduler
+		err = runScheduler(host, masterServices.Scheduler)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
