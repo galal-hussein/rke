@@ -6,7 +6,7 @@ import (
 )
 
 func RunControlPlane(masterHosts []hosts.Host, etcdHosts []hosts.Host, masterServices Services) error {
-	logrus.Infof("[Controlplane] Building up Controller Plane..")
+	logrus.Infof("[ControlPlane] Building up Controller Plane..")
 	for _, host := range masterHosts {
 		// run kubeapi
 		err := runKubeAPI(host, etcdHosts, masterServices.KubeAPI)

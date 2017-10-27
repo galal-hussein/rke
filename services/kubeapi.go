@@ -77,7 +77,7 @@ func constructKubeAPICommand(host hosts.Host, kubeAPIService KubeAPI, etcdConnSt
           --cloud-provider="" \
           --allow_privileged=true \
           --service-cluster-ip-range=10.233.0.0/18 \
-          --admission-control=NamespaceLifecycle,LimitRanger,ServiceAccount,PersistentVolumeLabel,DefaultStorageClass,ResourceQuota,DefaultTolerationSeconds \
+          --admission-control=NamespaceLifecycle,LimitRanger,PersistentVolumeLabel,DefaultStorageClass,ResourceQuota,DefaultTolerationSeconds \
           --runtime-config=batch/v2alpha1 \
           --runtime-config=authentication.k8s.io/v1beta1=true \
           --storage-backend=etcd3 \

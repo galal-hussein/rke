@@ -9,6 +9,8 @@ type Services struct {
 	KubeAPI        KubeAPI        `yaml:"kube-api"`
 	KubeController KubeController `yaml:"kube-controller"`
 	Scheduler      Scheduler      `yaml:"scheduler"`
+	Kubelet        Kubelet        `yaml:"kubelet"`
+	Kubeproxy      Kubeproxy      `yaml:"kubeproxy"`
 }
 
 const (
@@ -16,6 +18,8 @@ const (
 	MasterRole                  = "controlplane"
 	WorkerRole                  = "worker"
 	KubeAPIContainerName        = "kube-api"
+	KubeletContainerName        = "kubelet"
+	KubeproxyContainerName      = "kube-proxy"
 	KubeControllerContainerName = "kube-controller"
 	SchedulerContainerName      = "scheduler"
 	EtcdContainerName           = "etcd"

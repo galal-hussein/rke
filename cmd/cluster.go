@@ -50,7 +50,7 @@ func clusterUp(ctx *cli.Context) error {
 		logrus.Errorf("Failed to parse the cluster file: %v", err)
 		return err
 	}
-	etcdHosts, cpHosts, _ := hosts.DivideHosts(k8shosts)
+	etcdHosts, cpHosts, workerHosts := hosts.DivideHosts(k8shosts)
 	err = services.RunEtcdPlane(etcdHosts, servicesLookup.Services.Etcd)
 	if err != nil {
 		logrus.Errorf("[Etcd] Failed to bring up Etcd Plane: %v", err)
@@ -59,6 +59,11 @@ func clusterUp(ctx *cli.Context) error {
 	err = services.RunControlPlane(cpHosts, etcdHosts, servicesLookup.Services)
 	if err != nil {
 		logrus.Errorf("[ControlPlane] Failed to bring up Control Plane: %v", err)
+		return err
+	}
+	err = services.RunWorkerPlane(cpHosts, workerHosts, servicesLookup.Services)
+	if err != nil {
+		logrus.Errorf("[WorkerPlane] Failed to bring up Worker Plane: %v", err)
 		return err
 	}
 	return nil
