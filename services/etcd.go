@@ -1,10 +1,13 @@
 package services
 
 import (
+	"context"
 	"fmt"
-	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	"github.com/rancher/rke/hosts"
 )
 
@@ -16,12 +19,12 @@ type Etcd struct {
 func RunEtcdPlane(etcdHosts []hosts.Host, etcdService Etcd) error {
 	logrus.Infof("[Etcd] Building up Etcd Plane..")
 	for _, host := range etcdHosts {
-		isRunning, err := isEtcdRunning(host, etcdService)
+		isRunning, err := IsContainerRunning(host, EtcdContainerName)
 		if err != nil {
 			return err
 		}
 		if isRunning {
-			logrus.Infof("Etcd is already running on host [%s]", host.Hostname)
+			logrus.Infof("[Etcd] Container is already running on host [%s]", host.Hostname)
 			return nil
 		}
 		err = runEtcdContainer(host, etcdService)
@@ -32,60 +35,62 @@ func RunEtcdPlane(etcdHosts []hosts.Host, etcdService Etcd) error {
 	return nil
 }
 
-func isEtcdRunning(host hosts.Host, etcdService Etcd) (bool, error) {
-	cmd := "docker ps -a | grep " + EtcdContainerName + " | wc -l"
-	logrus.Infof("Check if Etcd is running on host [%s]", host.Hostname)
-	stdout, stderr := host.RunSSHCommand(cmd)
-	isRunning := strings.TrimSuffix(stdout, "\n")
-	if stderr != nil {
-		return false, fmt.Errorf("Failed to check if Etcd is running: %v", stderr)
-	}
-	if isRunning == "1" {
-		return true, nil
-	}
-	return false, nil
-}
-
 func runEtcdContainer(host hosts.Host, etcdService Etcd) error {
-	err := pullEtcdImage(host, etcdService)
+	logrus.Debugf("[Etcd] Pulling Image on host [%s]", host.Hostname)
+	err := PullImage(host, etcdService.Image+":"+etcdService.Version)
 	if err != nil {
 		return err
 	}
-
-	cmd := constructEtcdCommand(host, etcdService)
-	_, stderr := host.RunSSHCommand(cmd)
-
-	if stderr != nil {
-		return fmt.Errorf("Failed to run Etcd container on host [%s]: %v", host.Hostname, stderr)
+	logrus.Infof("[Etcd] Successfully pulled Etcd image on host [%s]", host.Hostname)
+	err = doRunEtcd(host, etcdService)
+	if err != nil {
+		return err
 	}
-	logrus.Infof("Successfully ran Etcd container on host [%s]", host.Hostname)
+	logrus.Infof("[Etcd] Successfully ran Etcd container on host [%s]", host.Hostname)
 	return nil
 }
 
-func pullEtcdImage(host hosts.Host, etcdService Etcd) error {
-	pullCmd := "docker pull " + etcdService.Image + ":" + etcdService.Version
-	stdout, stderr := host.RunSSHCommand(pullCmd)
-
-	if stderr != nil {
-		return fmt.Errorf("Failed to pull Etcd image on host [%s]: %v", host.Hostname, stderr)
+func doRunEtcd(host hosts.Host, etcdService Etcd) error {
+	imageCfg := &container.Config{
+		Image: etcdService.Image + ":" + etcdService.Version,
+		Cmd: []string{"/usr/local/bin/etcd",
+			"--name=etcd-" + host.Hostname,
+			"--data-dir=/etcd-data",
+			"--advertise-client-urls=http://" + host.IP + ":2379,http://" + host.IP + ":4001",
+			"--listen-client-urls=http://0.0.0.0:2379",
+			"--initial-advertise-peer-urls=http://" + host.IP + ":2380",
+			"--listen-peer-urls=http://0.0.0.0:2380",
+			"--initial-cluster-token=etcd-cluster-1",
+			"--initial-cluster=etcd-" + host.Hostname + "=http://" + host.IP + ":2380"},
 	}
-	logrus.Debugf("Pulling Image on host [%s]: %v", host.Hostname, stdout)
-	logrus.Infof("Successfully pulled Etcd image on host [%s]", host.Hostname)
-	return nil
-}
+	hostCfg := &container.HostConfig{
+		RestartPolicy: container.RestartPolicy{Name: "always"},
+		Binds: []string{
+			"/var/lib/etcd:/etcd-data"},
+		PortBindings: nat.PortMap{
+			"2379/tcp": []nat.PortBinding{
+				{
+					HostIP:   "0.0.0.0",
+					HostPort: "2379",
+				},
+			},
+			"2380/tcp": []nat.PortBinding{
+				{
+					HostIP:   "0.0.0.0",
+					HostPort: "2380",
+				},
+			},
+		},
+	}
+	resp, err := host.DClient.ContainerCreate(context.Background(), imageCfg, hostCfg, nil, EtcdContainerName)
+	if err != nil {
+		return fmt.Errorf("Failed to create Etcd container on host [%s]: %v", host.Hostname, err)
+	}
 
-func constructEtcdCommand(host hosts.Host, etcdService Etcd) string {
-	return `docker run -d -p 2379:2379 -p 2380:2380 \
-					--volume=/var/lib/etcd:/etcd-data \
-          --name ` + EtcdContainerName + ` ` + etcdService.Image + `:` + etcdService.Version + ` \
-					/usr/local/bin/etcd --name etcd-` + host.Hostname + ` \
-					--data-dir=/etcd-data \
-          --advertise-client-urls http://` + host.IP + `:2379,http://` + host.IP + `:4001 \
-          --listen-client-urls http://0.0.0.0:2379 \
-          --initial-advertise-peer-urls http://` + host.IP + `:2380 \
-          --listen-peer-urls http://0.0.0.0:2380 \
-          --initial-cluster-token etcd-cluster-1 \
-          --initial-cluster etcd-` + host.Hostname + `=http://` + host.IP + `:2380`
+	if err := host.DClient.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
+		return fmt.Errorf("Failed to start Etcd container on host [%s]: %v", host.Hostname, err)
+	}
+	return nil
 }
 
 func getEtcdConnString(hosts []hosts.Host) string {

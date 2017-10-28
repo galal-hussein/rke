@@ -1,10 +1,12 @@
 package services
 
 import (
+	"context"
 	"fmt"
-	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/rancher/rke/hosts"
 )
 
@@ -14,7 +16,7 @@ type Kubeproxy struct {
 }
 
 func runKubeproxy(host hosts.Host, masterHost hosts.Host, kubeproxyService Kubeproxy) error {
-	isRunning, err := isKubeproxyRunning(host, masterHost, kubeproxyService)
+	isRunning, err := IsContainerRunning(host, KubeproxyContainerName)
 	if err != nil {
 		return err
 	}
@@ -29,55 +31,43 @@ func runKubeproxy(host hosts.Host, masterHost hosts.Host, kubeproxyService Kubep
 	return nil
 }
 
-func isKubeproxyRunning(host hosts.Host, masterHost hosts.Host, kubeproxyService Kubeproxy) (bool, error) {
-	cmd := "docker ps -a | grep " + KubeproxyContainerName + " | wc -l"
-	logrus.Infof("Check if Kubeproxy is running on host [%s]", host.Hostname)
-	stdout, stderr := host.RunSSHCommand(cmd)
-	isRunning := strings.TrimSuffix(stdout, "\n")
-	if stderr != nil {
-		return false, fmt.Errorf("Failed to check if Kubeproxy is running: %v", stderr)
-	}
-	if isRunning == "1" {
-		return true, nil
-	}
-	return false, nil
-}
-
 func runKubeproxyContainer(host hosts.Host, masterHost hosts.Host, kubeproxyService Kubeproxy) error {
-	err := pullKubeproxyImage(host, kubeproxyService)
+	logrus.Debugf("[WorkerPlane] Pulling KubeProxy Image on host [%s]", host.Hostname)
+	err := PullImage(host, kubeproxyService.Image+":"+kubeproxyService.Version)
 	if err != nil {
 		return err
 	}
-	cmd := constructKubeproxyCommand(host, masterHost, kubeproxyService)
-	_, stderr := host.RunSSHCommand(cmd)
+	logrus.Infof("[WorkerPlane] Successfully pulled KubeProxy image on host [%s]", host.Hostname)
 
-	if stderr != nil {
-		return fmt.Errorf("Failed to run Kubeproxy container on host [%s]: %v", host.Hostname, stderr)
+	err = doRunKubeProxy(host, masterHost, kubeproxyService)
+	if err != nil {
+		return err
 	}
-	logrus.Infof("Successfully ran Kubeproxy container on host [%s]", host.Hostname)
+	logrus.Infof("[ControlPlane] Successfully ran KubeProxy container on host [%s]", host.Hostname)
 	return nil
 }
 
-func pullKubeproxyImage(host hosts.Host, kubeproxyService Kubeproxy) error {
-	pullCmd := "docker pull " + kubeproxyService.Image + ":" + kubeproxyService.Version
-	stdout, stderr := host.RunSSHCommand(pullCmd)
-	if stderr != nil {
-		return fmt.Errorf("Failed to pull Kubeproxy image on host [%s]: %v", host.Hostname, stderr)
+func doRunKubeProxy(host hosts.Host, masterHost hosts.Host, kubeproxyService Kubeproxy) error {
+	imageCfg := &container.Config{
+		Image: kubeproxyService.Image + ":" + kubeproxyService.Version,
+		Cmd: []string{"/hyperkube",
+			"proxy",
+			"--v=2",
+			"--healthz-bind-address=0.0.0.0",
+			"--master=http://" + masterHost.IP + ":8080/"},
 	}
-	logrus.Debugf("Pulling Image on host [%s]: %v", host.Hostname, stdout)
-	logrus.Infof("Successfully pulled Kubeproxy image on host [%s]", host.Hostname)
-	return nil
-}
+	hostCfg := &container.HostConfig{
+		NetworkMode:   "host",
+		RestartPolicy: container.RestartPolicy{Name: "always"},
+		Privileged:    true,
+	}
+	resp, err := host.DClient.ContainerCreate(context.Background(), imageCfg, hostCfg, nil, KubeproxyContainerName)
+	if err != nil {
+		return fmt.Errorf("Failed to create KubeProxy container on host [%s]: %v", host.Hostname, err)
+	}
 
-func constructKubeproxyCommand(host hosts.Host, masterHost hosts.Host, kubeproxyService Kubeproxy) string {
-	return `docker run -d \
-			  --net=host \
-			  --privileged \
-			  --name=` + KubeproxyContainerName + ` \
-			  --restart=on-failure:5 \
-			  ` + kubeproxyService.Image + `:` + kubeproxyService.Version + ` \
-			  ./hyperkube proxy \
-				--v=2 \
-				--healthz-bind-address=0.0.0.0 \
-				--master=http://` + masterHost.IP + `:8080/ `
+	if err := host.DClient.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
+		return fmt.Errorf("Failed to start KubeProxy container on host [%s]: %v", host.Hostname, err)
+	}
+	return nil
 }

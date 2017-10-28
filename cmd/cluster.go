@@ -45,10 +45,24 @@ func clusterUp(ctx *cli.Context) error {
 		logrus.Errorf("Failed to bring cluster up: %v", err)
 		return err
 	}
+	logrus.Debugf("Parsing cluster file [%v]", clusterFile)
 	servicesLookup, k8shosts, err := parseClusterFile(clusterFile)
 	if err != nil {
 		logrus.Errorf("Failed to parse the cluster file: %v", err)
 		return err
+	}
+	defer hosts.RemoveSocketDir()
+	for i := range k8shosts {
+		// Set up socket tunneling
+		hosts.CreateSocketDirIfNotExist()
+		k8shosts[i].SetSocketPath()
+		go k8shosts[i].TunnelUp(ctx)
+		err = k8shosts[i].WaitForSocketTunnel()
+		if err != nil {
+			return err
+		}
+		// Cleanup socket dir and file
+		defer k8shosts[i].RemoveSocketFile()
 	}
 	etcdHosts, cpHosts, workerHosts := hosts.DivideHosts(k8shosts)
 	err = services.RunEtcdPlane(etcdHosts, servicesLookup.Services.Etcd)
@@ -67,7 +81,6 @@ func clusterUp(ctx *cli.Context) error {
 		return err
 	}
 	return nil
-
 }
 
 func resolveClusterFile(ctx *cli.Context) (string, error) {

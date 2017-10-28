@@ -1,10 +1,13 @@
 package services
 
 import (
+	"context"
 	"fmt"
-	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	"github.com/rancher/rke/hosts"
 )
 
@@ -14,7 +17,7 @@ type Kubelet struct {
 }
 
 func runKubelet(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet, isMaster bool) error {
-	isRunning, err := isKubeletRunning(host, masterHost, kubeletService)
+	isRunning, err := IsContainerRunning(host, KubeletContainerName)
 	if err != nil {
 		return err
 	}
@@ -29,80 +32,80 @@ func runKubelet(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet, 
 	return nil
 }
 
-func isKubeletRunning(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet) (bool, error) {
-	cmd := "docker ps -a | grep " + KubeletContainerName + " | wc -l"
-	logrus.Infof("Check if Kubelet is running on host [%s]", host.Hostname)
-	stdout, stderr := host.RunSSHCommand(cmd)
-	isRunning := strings.TrimSuffix(stdout, "\n")
-	if stderr != nil {
-		return false, fmt.Errorf("Failed to check if Kubelet is running: %v", stderr)
-	}
-	if isRunning == "1" {
-		return true, nil
-	}
-	return false, nil
-}
-
 func runKubeletContainer(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet, isMaster bool) error {
-	err := pullKubeletImage(host, kubeletService)
+	logrus.Debugf("[WorkerPlane] Pulling Kubelet Image on host [%s]", host.Hostname)
+	err := PullImage(host, kubeletService.Image+":"+kubeletService.Version)
 	if err != nil {
 		return err
 	}
-	cmd := constructKubeletCommand(host, masterHost, kubeletService, isMaster)
-	_, stderr := host.RunSSHCommand(cmd)
+	logrus.Infof("[WorkerPlane] Successfully pulled Kubelet image on host [%s]", host.Hostname)
 
-	if stderr != nil {
-		return fmt.Errorf("Failed to run Kubelet container on host [%s]: %v", host.Hostname, stderr)
+	err = doRunKubelet(host, masterHost, kubeletService, isMaster)
+	if err != nil {
+		return err
 	}
-	logrus.Infof("Successfully ran Kubelet container on host [%s]", host.Hostname)
+	logrus.Infof("[WorkerPlane] Successfully ran Kubelet container on host [%s]", host.Hostname)
 	return nil
 }
 
-func pullKubeletImage(host hosts.Host, kubeletService Kubelet) error {
-	pullCmd := "docker pull " + kubeletService.Image + ":" + kubeletService.Version
-	stdout, stderr := host.RunSSHCommand(pullCmd)
-	if stderr != nil {
-		return fmt.Errorf("Failed to pull Kubelet image on host [%s]: %v", host.Hostname, stderr)
+func doRunKubelet(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet, isMaster bool) error {
+	imageCfg := &container.Config{
+		Image: kubeletService.Image + ":" + kubeletService.Version,
+		Cmd: []string{"/hyperkube",
+			"kubelet",
+			"--v=2",
+			"--address=0.0.0.0",
+			"--cluster-domain=cluster.local",
+			"--hostname-override=" + host.Hostname,
+			"--pod-infra-container-image=gcr.io/google_containers/pause-amd64:3.0",
+			"--cgroup-driver=cgroupfs",
+			"--cgroups-per-qos=True",
+			"--enforce-node-allocatable=",
+			"--cluster-dns=10.233.0.3",
+			"--network-plugin=cni",
+			"--cni-conf-dir=/etc/cni/net.d",
+			"--cni-bin-dir=/opt/cni/bin",
+			"--resolv-conf=/etc/resolv.conf",
+			"--allow-privileged=true",
+			"--cloud-provider=",
+			"--api-servers=http://" + masterHost.IP + ":8080/",
+		},
 	}
-	logrus.Debugf("Pulling Image on host [%s]: %v", host.Hostname, stdout)
-	logrus.Infof("Successfully pulled Kubelet image on host [%s]", host.Hostname)
-	return nil
-}
-
-func constructKubeletCommand(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet, isMaster bool) string {
-	var masterArgs string
 	if isMaster {
-		masterArgs = "--register-with-taints=node-role.kubernetes.io/master=:NoSchedule --node-labels=node-role.kubernetes.io/master=true"
+		imageCfg.Cmd = append(imageCfg.Cmd, "--register-with-taints=node-role.kubernetes.io/master=:NoSchedule")
+		imageCfg.Cmd = append(imageCfg.Cmd, "--node-labels=node-role.kubernetes.io/master=true")
 	}
-	return `docker run -d \
-			  --net=host \
-			  --pid=host \
-			  --privileged \
-			  --name=` + KubeletContainerName + ` \
-			  --restart=on-failure:5 \
-			  -v /etc/cni:/etc/cni:ro \
-			  -v /opt/cni:/opt/cni:ro \
-			  -v /etc/resolv.conf:/etc/resolv.conf \
-			  -v /sys:/sys:ro \
-			  -v /var/lib/docker:/var/lib/docker:rw \
-			  -v /var/lib/kubelet:/var/lib/kubelet:shared \
-			  -v /var/run:/var/run:rw \
-				-v /run:/run \
-				-v /dev:/host/dev \
-			  ` + kubeletService.Image + `:` + kubeletService.Version + ` \
-			  ./hyperkube kubelet \
-				--v=2 \
-				--address=0.0.0.0 \
-				--cluster-domain=cluster.local \
-				--hostname-override=` + host.Hostname + ` \
-				--pod-infra-container-image=gcr.io/google_containers/pause-amd64:3.0 \
-				--cgroup-driver=cgroupfs \
-				--cgroups-per-qos=True \
-				--enforce-node-allocatable=""  \
-				--cluster-dns=10.233.0.3 \
-				--resolv-conf=/etc/resolv.conf \
-				--network-plugin=cni --cni-conf-dir=/etc/cni/net.d --cni-bin-dir=/opt/cni/bin \
-				--allow-privileged=true \
-				--cloud-provider="" ` + masterArgs + ` \
-				--api-servers=http://` + masterHost.IP + `:8080/ `
+	hostCfg := &container.HostConfig{
+		Binds: []string{
+			"/etc/cni:/etc/cni:ro",
+			"/opt/cni:/opt/cni:ro",
+			"/etc/resolv.conf:/etc/resolv.conf",
+			"/sys:/sys:ro",
+			"/var/lib/docker:/var/lib/docker:rw",
+			"/var/lib/kubelet:/var/lib/kubelet:shared",
+			"/var/run:/var/run:rw",
+			"/run:/run",
+			"/dev:/host/dev"},
+		NetworkMode:   "host",
+		PidMode:       "host",
+		Privileged:    true,
+		RestartPolicy: container.RestartPolicy{Name: "always"},
+		PortBindings: nat.PortMap{
+			"8080/tcp": []nat.PortBinding{
+				{
+					HostIP:   "0.0.0.0",
+					HostPort: "8080",
+				},
+			},
+		},
+	}
+	resp, err := host.DClient.ContainerCreate(context.Background(), imageCfg, hostCfg, nil, KubeletContainerName)
+	if err != nil {
+		return fmt.Errorf("Failed to create Kubelet container on host [%s]: %v", host.Hostname, err)
+	}
+
+	if err := host.DClient.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
+		return fmt.Errorf("Failed to start Kubelet container on host [%s]: %v", host.Hostname, err)
+	}
+	return nil
 }

@@ -1,10 +1,12 @@
 package services
 
 import (
+	"context"
 	"fmt"
-	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/rancher/rke/hosts"
 )
 
@@ -14,7 +16,7 @@ type Scheduler struct {
 }
 
 func runScheduler(host hosts.Host, schedulerService Scheduler) error {
-	isRunning, err := isSchedulerRunning(host, schedulerService)
+	isRunning, err := IsContainerRunning(host, SchedulerContainerName)
 	if err != nil {
 		return err
 	}
@@ -29,50 +31,41 @@ func runScheduler(host hosts.Host, schedulerService Scheduler) error {
 	return nil
 }
 
-func isSchedulerRunning(host hosts.Host, schedulerService Scheduler) (bool, error) {
-	cmd := "docker ps -a | grep " + SchedulerContainerName + " | wc -l"
-	logrus.Infof("Check if Scheduler is running on host [%s]", host.Hostname)
-	stdout, stderr := host.RunSSHCommand(cmd)
-	isRunning := strings.TrimSuffix(stdout, "\n")
-	if stderr != nil {
-		return false, fmt.Errorf("Failed to check if Scheduler is running: %v", stderr)
-	}
-	if isRunning == "1" {
-		return true, nil
-	}
-	return false, nil
-}
-
 func runSchedulerContainer(host hosts.Host, schedulerService Scheduler) error {
-	err := pullSchedulerImage(host, schedulerService)
+	logrus.Debugf("[ControlPlane] Pulling Scheduler Image on host [%s]", host.Hostname)
+	err := PullImage(host, schedulerService.Image+":"+schedulerService.Version)
 	if err != nil {
 		return err
 	}
-	cmd := constructSchedulerCommand(host, schedulerService)
-	_, stderr := host.RunSSHCommand(cmd)
+	logrus.Infof("[ControlPlane] Successfully pulled Scheduler image on host [%s]", host.Hostname)
 
-	if stderr != nil {
-		return fmt.Errorf("Failed to run Scheduler container on host [%s]: %v", host.Hostname, stderr)
+	err = doRunScheduler(host, schedulerService)
+	if err != nil {
+		return err
 	}
-	logrus.Infof("Successfully ran Scheduler container on host [%s]", host.Hostname)
+	logrus.Infof("[ControlPlane] Successfully ran Scheduler container on host [%s]", host.Hostname)
 	return nil
 }
 
-func pullSchedulerImage(host hosts.Host, schedulerService Scheduler) error {
-	pullCmd := "docker pull " + schedulerService.Image + ":" + schedulerService.Version
-	stdout, stderr := host.RunSSHCommand(pullCmd)
-	if stderr != nil {
-		return fmt.Errorf("Failed to pull Scheduler image on host [%s]: %v", host.Hostname, stderr)
+func doRunScheduler(host hosts.Host, schedulerService Scheduler) error {
+	imageCfg := &container.Config{
+		Image: schedulerService.Image + ":" + schedulerService.Version,
+		Cmd: []string{"/hyperkube",
+			"scheduler",
+			"--v=2",
+			"--address=0.0.0.0",
+			"--master=http://" + host.IP + ":8080/"},
 	}
-	logrus.Debugf("Pulling Image on host [%s]: %v", host.Hostname, stdout)
-	logrus.Infof("Successfully pulled Scheduler image on host [%s]", host.Hostname)
-	return nil
-}
+	hostCfg := &container.HostConfig{
+		RestartPolicy: container.RestartPolicy{Name: "always"},
+	}
+	resp, err := host.DClient.ContainerCreate(context.Background(), imageCfg, hostCfg, nil, SchedulerContainerName)
+	if err != nil {
+		return fmt.Errorf("Failed to create KubeProxy container on host [%s]: %v", host.Hostname, err)
+	}
 
-func constructSchedulerCommand(host hosts.Host, schedulerService Scheduler) string {
-	return `docker run -d --name=` + SchedulerContainerName + `\
-          ` + schedulerService.Image + `:` + schedulerService.Version + ` /hyperkube scheduler \
-					--master=http://` + host.IP + `:8080 \
-          --address=0.0.0.0 \
-          --v=2`
+	if err := host.DClient.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
+		return fmt.Errorf("Failed to start KubeProxy container on host [%s]: %v", host.Hostname, err)
+	}
+	return nil
 }
