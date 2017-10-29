@@ -21,7 +21,7 @@ func runKubeController(host hosts.Host, kubeControllerService KubeController) er
 		return err
 	}
 	if isRunning {
-		logrus.Infof("Kube-Controller is already running on host [%s]", host.Hostname)
+		logrus.Infof("[ControlPlane] Kube-Controller is already running on host [%s]", host.Hostname)
 		return nil
 	}
 	err = runKubeControllerContainer(host, kubeControllerService)
@@ -74,5 +74,6 @@ func doRunKubeController(host hosts.Host, kubeControllerService KubeController) 
 	if err := host.DClient.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("Failed to start Kube Controller container on host [%s]: %v", host.Hostname, err)
 	}
+	logrus.Debugf("[ControlPlane] Successfully started Kube Controller container: %s", resp.ID)
 	return nil
 }

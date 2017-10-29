@@ -90,6 +90,7 @@ func doRunEtcd(host hosts.Host, etcdService Etcd) error {
 	if err := host.DClient.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("Failed to start Etcd container on host [%s]: %v", host.Hostname, err)
 	}
+	logrus.Debugf("[Etcd] Successfully started Etcd container: %s", resp.ID)
 	return nil
 }
 

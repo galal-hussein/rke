@@ -21,7 +21,7 @@ func runScheduler(host hosts.Host, schedulerService Scheduler) error {
 		return err
 	}
 	if isRunning {
-		logrus.Infof("Scheduler is already running on host [%s]", host.Hostname)
+		logrus.Infof("[ControlPlane] Scheduler is already running on host [%s]", host.Hostname)
 		return nil
 	}
 	err = runSchedulerContainer(host, schedulerService)
@@ -61,11 +61,12 @@ func doRunScheduler(host hosts.Host, schedulerService Scheduler) error {
 	}
 	resp, err := host.DClient.ContainerCreate(context.Background(), imageCfg, hostCfg, nil, SchedulerContainerName)
 	if err != nil {
-		return fmt.Errorf("Failed to create KubeProxy container on host [%s]: %v", host.Hostname, err)
+		return fmt.Errorf("Failed to create Scheduler container on host [%s]: %v", host.Hostname, err)
 	}
 
 	if err := host.DClient.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
-		return fmt.Errorf("Failed to start KubeProxy container on host [%s]: %v", host.Hostname, err)
+		return fmt.Errorf("Failed to start Scheduler container on host [%s]: %v", host.Hostname, err)
 	}
+	logrus.Debugf("[ControlPlane] Successfully started Scheduler container: %s", resp.ID)
 	return nil
 }

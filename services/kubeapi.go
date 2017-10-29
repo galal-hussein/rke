@@ -22,7 +22,7 @@ func runKubeAPI(host hosts.Host, etcdHosts []hosts.Host, kubeAPIService KubeAPI)
 		return err
 	}
 	if isRunning {
-		logrus.Infof("KubeAPI is already running on host [%s]", host.Hostname)
+		logrus.Infof("[ControlPlane] KubeAPI is already running on host [%s]", host.Hostname)
 		return nil
 	}
 	etcdConnString := getEtcdConnString(etcdHosts)
@@ -85,5 +85,6 @@ func doRunKubeAPI(host hosts.Host, kubeAPIService KubeAPI, etcdConnString string
 	if err := host.DClient.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("Failed to start Kube API container on host [%s]: %v", host.Hostname, err)
 	}
+	logrus.Debugf("[ControlPlane] Successfully started Kube API container: %s", resp.ID)
 	return nil
 }

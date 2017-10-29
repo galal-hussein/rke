@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api/types"
 	"github.com/rancher/rke/hosts"
 	"golang.org/x/net/context"
@@ -36,6 +38,7 @@ const (
 )
 
 func IsContainerRunning(host hosts.Host, containerName string) (bool, error) {
+	logrus.Debugf("Checking if container %s is running on host [%s]", containerName, host.Hostname)
 	containers, err := host.DClient.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
 		return false, fmt.Errorf("Can't get Docker containers for host [%s]: %v", host.Hostname, err)
@@ -55,6 +58,11 @@ func PullImage(host hosts.Host, containerImage string) error {
 		return fmt.Errorf("Can't pull Docker image %s for host [%s]: %v", containerImage, host.Hostname, err)
 	}
 	defer out.Close()
-	io.Copy(ioutil.Discard, out)
+	if logrus.GetLevel() == logrus.DebugLevel {
+		io.Copy(os.Stdout, out)
+	} else {
+		io.Copy(ioutil.Discard, out)
+	}
+
 	return nil
 }

@@ -21,7 +21,7 @@ func runKubeproxy(host hosts.Host, masterHost hosts.Host, kubeproxyService Kubep
 		return err
 	}
 	if isRunning {
-		logrus.Infof("Kubeproxy is already running on host [%s]", host.Hostname)
+		logrus.Infof("[WorkerPlane] Kubeproxy is already running on host [%s]", host.Hostname)
 		return nil
 	}
 	err = runKubeproxyContainer(host, masterHost, kubeproxyService)
@@ -43,7 +43,7 @@ func runKubeproxyContainer(host hosts.Host, masterHost hosts.Host, kubeproxyServ
 	if err != nil {
 		return err
 	}
-	logrus.Infof("[ControlPlane] Successfully ran KubeProxy container on host [%s]", host.Hostname)
+	logrus.Infof("[WorkerPlane] Successfully ran KubeProxy container on host [%s]", host.Hostname)
 	return nil
 }
 
@@ -65,9 +65,9 @@ func doRunKubeProxy(host hosts.Host, masterHost hosts.Host, kubeproxyService Kub
 	if err != nil {
 		return fmt.Errorf("Failed to create KubeProxy container on host [%s]: %v", host.Hostname, err)
 	}
-
 	if err := host.DClient.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("Failed to start KubeProxy container on host [%s]: %v", host.Hostname, err)
 	}
+	logrus.Debugf("[WorkerPlane] Successfully started KubeProxy container: %s", resp.ID)
 	return nil
 }

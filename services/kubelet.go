@@ -22,7 +22,7 @@ func runKubelet(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet, 
 		return err
 	}
 	if isRunning {
-		logrus.Infof("Kubelet is already running on host [%s]", host.Hostname)
+		logrus.Infof("[WorkerPlane] Kubelet is already running on host [%s]", host.Hostname)
 		return nil
 	}
 	err = runKubeletContainer(host, masterHost, kubeletService, isMaster)
@@ -107,5 +107,6 @@ func doRunKubelet(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet
 	if err := host.DClient.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("Failed to start Kubelet container on host [%s]: %v", host.Hostname, err)
 	}
+	logrus.Debugf("[WorkerPlane] Successfully started Kubelet container: %s", resp.ID)
 	return nil
 }
