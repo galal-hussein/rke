@@ -13,6 +13,7 @@ import (
 type Scheduler struct {
 	Version string `yaml:"version"`
 	Image   string `yaml:"image"`
+	HealthCheck	HealthCheck	`yaml:"health_check"`
 }
 
 func runScheduler(host hosts.Host, schedulerService Scheduler) error {
@@ -48,6 +49,7 @@ func runSchedulerContainer(host hosts.Host, schedulerService Scheduler) error {
 }
 
 func doRunScheduler(host hosts.Host, schedulerService Scheduler) error {
+	healthConfig := BuildHealthCheckConfig(schedulerService.HealthCheck)
 	imageCfg := &container.Config{
 		Image: schedulerService.Image + ":" + schedulerService.Version,
 		Cmd: []string{"/hyperkube",
@@ -55,6 +57,7 @@ func doRunScheduler(host hosts.Host, schedulerService Scheduler) error {
 			"--v=2",
 			"--address=0.0.0.0",
 			"--master=http://" + host.IP + ":8080/"},
+		Healthcheck: healthConfig,
 	}
 	hostCfg := &container.HostConfig{
 		RestartPolicy: container.RestartPolicy{Name: "always"},

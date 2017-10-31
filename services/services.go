@@ -5,9 +5,11 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/rancher/rke/hosts"
 	"golang.org/x/net/context"
 )
@@ -25,6 +27,13 @@ type Services struct {
 	Kubeproxy      Kubeproxy      `yaml:"kubeproxy"`
 }
 
+type HealthCheck struct {
+	Command        string         `yaml:"command"`
+	Interval       time.Duration  `yaml:"interval"`
+	Timeout        time.Duration  `yaml:"timeout"`
+	StartPeriod    time.Duration  `yaml:"start_period"`
+	Retries        int            `yaml:"retries"`
+}
 const (
 	ETCDRole                    = "etcd"
 	MasterRole                  = "controlplane"
@@ -65,4 +74,19 @@ func PullImage(host hosts.Host, containerImage string) error {
 	}
 
 	return nil
+}
+
+func BuildHealthCheckConfig(healthCheck HealthCheck) *container.HealthConfig {
+	if healthCheck != (HealthCheck{}) {
+		return &container.HealthConfig{
+							Test: []string{"CMD-SHELL",
+								healthCheck.Command},
+							Interval: healthCheck.Interval,
+							Timeout: healthCheck.Timeout,
+							StartPeriod: healthCheck.StartPeriod,
+							Retries: healthCheck.Retries}
+	} else {
+		logrus.Debugf("[HealthCheck] No Docker Health check defined..")
+		return nil
+	}
 }

@@ -14,6 +14,7 @@ import (
 type Etcd struct {
 	Version string `yaml:"version"`
 	Image   string `yaml:"image"`
+	HealthCheck	HealthCheck	`yaml:"health_check"`
 }
 
 func RunEtcdPlane(etcdHosts []hosts.Host, etcdService Etcd) error {
@@ -51,6 +52,7 @@ func runEtcdContainer(host hosts.Host, etcdService Etcd) error {
 }
 
 func doRunEtcd(host hosts.Host, etcdService Etcd) error {
+	healthConfig := BuildHealthCheckConfig(etcdService.HealthCheck)
 	imageCfg := &container.Config{
 		Image: etcdService.Image + ":" + etcdService.Version,
 		Cmd: []string{"/usr/local/bin/etcd",
@@ -62,6 +64,7 @@ func doRunEtcd(host hosts.Host, etcdService Etcd) error {
 			"--listen-peer-urls=http://0.0.0.0:2380",
 			"--initial-cluster-token=etcd-cluster-1",
 			"--initial-cluster=etcd-" + host.Hostname + "=http://" + host.IP + ":2380"},
+		Healthcheck: healthConfig,
 	}
 	hostCfg := &container.HostConfig{
 		RestartPolicy: container.RestartPolicy{Name: "always"},

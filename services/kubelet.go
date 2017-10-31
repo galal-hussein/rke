@@ -16,6 +16,7 @@ type Kubelet struct {
 	Image   string `yaml:"image"`
 	ClusterDomain	string `yaml:"cluster_domain"`
 	InfraContainerImage string `yaml:"infra_container_image"`
+	HealthCheck	HealthCheck	`yaml:"health_check"`
 }
 
 func runKubelet(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet, isMaster bool) error {
@@ -51,6 +52,7 @@ func runKubeletContainer(host hosts.Host, masterHost hosts.Host, kubeletService 
 }
 
 func doRunKubelet(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet, isMaster bool) error {
+	healthConfig := BuildHealthCheckConfig(kubeletService.HealthCheck)
 	imageCfg := &container.Config{
 		Image: kubeletService.Image + ":" + kubeletService.Version,
 		Cmd: []string{"/hyperkube",
@@ -70,8 +72,8 @@ func doRunKubelet(host hosts.Host, masterHost hosts.Host, kubeletService Kubelet
 			"--resolv-conf=/etc/resolv.conf",
 			"--allow-privileged=true",
 			"--cloud-provider=",
-			"--api-servers=http://" + masterHost.IP + ":8080/",
-		},
+			"--api-servers=http://" + masterHost.IP + ":8080/"},
+		Healthcheck: healthConfig,
 	}
 	if isMaster {
 		imageCfg.Cmd = append(imageCfg.Cmd, "--register-with-taints=node-role.kubernetes.io/master=:NoSchedule")

@@ -13,6 +13,7 @@ import (
 type Kubeproxy struct {
 	Version string `yaml:"version"`
 	Image   string `yaml:"image"`
+	HealthCheck	HealthCheck	`yaml:"health_check"`
 }
 
 func runKubeproxy(host hosts.Host, masterHost hosts.Host, kubeproxyService Kubeproxy) error {
@@ -48,6 +49,7 @@ func runKubeproxyContainer(host hosts.Host, masterHost hosts.Host, kubeproxyServ
 }
 
 func doRunKubeProxy(host hosts.Host, masterHost hosts.Host, kubeproxyService Kubeproxy) error {
+	healthConfig := BuildHealthCheckConfig(kubeproxyService.HealthCheck)
 	imageCfg := &container.Config{
 		Image: kubeproxyService.Image + ":" + kubeproxyService.Version,
 		Cmd: []string{"/hyperkube",
@@ -55,6 +57,7 @@ func doRunKubeProxy(host hosts.Host, masterHost hosts.Host, kubeproxyService Kub
 			"--v=2",
 			"--healthz-bind-address=0.0.0.0",
 			"--master=http://" + masterHost.IP + ":8080/"},
+		Healthcheck: healthConfig,
 	}
 	hostCfg := &container.HostConfig{
 		NetworkMode:   "host",

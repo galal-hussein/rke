@@ -15,6 +15,7 @@ type KubeAPI struct {
 	Version string `yaml:"version"`
 	Image   string `yaml:"image"`
 	ServiceClusterIPRange	string `yaml:"service_cluster_ip_range"`
+	HealthCheck	HealthCheck	`yaml:"health_check"`
 }
 
 func runKubeAPI(host hosts.Host, etcdHosts []hosts.Host, kubeAPIService KubeAPI) error {
@@ -50,6 +51,7 @@ func runKubeAPIContainer(host hosts.Host, kubeAPIService KubeAPI, etcdConnString
 }
 
 func doRunKubeAPI(host hosts.Host, kubeAPIService KubeAPI, etcdConnString string) error {
+	healthConfig := BuildHealthCheckConfig(kubeAPIService.HealthCheck)
 	imageCfg := &container.Config{
 		Image: kubeAPIService.Image + ":" + kubeAPIService.Version,
 		Cmd: []string{"/hyperkube",
@@ -65,6 +67,7 @@ func doRunKubeAPI(host hosts.Host, kubeAPIService KubeAPI, etcdConnString string
 			"--storage-backend=etcd3",
 			"--etcd-servers=" + etcdConnString,
 			"--advertise-address=" + host.IP},
+		Healthcheck: healthConfig,
 	}
 	hostCfg := &container.HostConfig{
 		NetworkMode:   "host",

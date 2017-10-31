@@ -15,6 +15,7 @@ type KubeController struct {
 	Image   string `yaml:"image"`
 	ClusterCIDR string `yaml:"cluster_cider"`
 	ServiceClusterIPRange	string `yaml:"service_cluster_ip_range"`
+	HealthCheck	HealthCheck	`yaml:"health_check"`
 }
 
 func runKubeController(host hosts.Host, kubeControllerService KubeController) error {
@@ -50,6 +51,7 @@ func runKubeControllerContainer(host hosts.Host, kubeControllerService KubeContr
 }
 
 func doRunKubeController(host hosts.Host, kubeControllerService KubeController) error {
+	healthConfig := BuildHealthCheckConfig(kubeControllerService.HealthCheck)
 	imageCfg := &container.Config{
 		Image: kubeControllerService.Image + ":" + kubeControllerService.Version,
 		Cmd: []string{"/hyperkube",
@@ -64,6 +66,7 @@ func doRunKubeController(host hosts.Host, kubeControllerService KubeController) 
 			"--allocate-node-cidrs=true",
 			"--cluster-cidr=" + kubeControllerService.ClusterCIDR,
 			"--service-cluster-ip-range=" + kubeControllerService.ServiceClusterIPRange},
+		Healthcheck: healthConfig,
 	}
 	hostCfg := &container.HostConfig{
 		RestartPolicy: container.RestartPolicy{Name: "always"},
