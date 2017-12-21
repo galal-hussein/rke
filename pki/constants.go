@@ -58,4 +58,8 @@ const (
 	KubeAdminOrganizationName = "system:masters"
 	KubeAdminConfigPrefix     = ".kube_config_"
 	KubeAdminConfigENVName    = "KUBECFG_ADMIN"
+
+	EtcdCertName          = "etcd"
+	EtcdCertENVName       = "KUBE_ETCD"
+	EtcdKeyCertPathPrefix = "/etc/kubernetes/ssl/kube-etcd"
 )

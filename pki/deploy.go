@@ -62,6 +62,29 @@ func DeployCertificatesOnWorkers(ctx context.Context, workerHosts []*hosts.Host,
 	return nil
 }
 
+func DeployCertificatesOnEtcd(ctx context.Context, etcdHosts []*hosts.Host, crtMap map[string]CertificatePKI, certDownloaderImage string) error {
+	// list of certificates that should be deployed on the etcd
+	crtList := []string{
+		CACertName,
+	}
+	for i := range etcdHosts {
+		crtList = append(crtList, getEtcdCrtName(i))
+	}
+	env := []string{}
+	for _, crtName := range crtList {
+		c := crtMap[crtName]
+		env = append(env, c.ToEnv()...)
+	}
+
+	for i := range etcdHosts {
+		err := doRunDeployer(ctx, etcdHosts[i], env, certDownloaderImage)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func doRunDeployer(ctx context.Context, host *hosts.Host, containerEnv []string, certDownloaderImage string) error {
 	if err := docker.UseLocalOrPull(ctx, host.DClient, host.Address, certDownloaderImage, CertificatesServiceName); err != nil {
 		return err

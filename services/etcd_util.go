@@ -25,7 +25,7 @@ func getEtcdClient(ctx context.Context, etcdHost *hosts.Host, localConnDialerFac
 	}
 
 	cfg := etcdclient.Config{
-		Endpoints: []string{"http://127.0.0.1:2379"},
+		Endpoints: []string{"https://127.0.0.1:2379"},
 		Transport: DefaultEtcdTransport,
 	}
 
@@ -62,7 +62,7 @@ func isEtcdHealthy(ctx context.Context, localConnDialerFactory hosts.DialerFacto
 
 func getHealthEtcd(hc http.Client, host *hosts.Host) (string, error) {
 	healthy := struct{ Health string }{}
-	resp, err := hc.Get("http://127.0.0.1:2379/health")
+	resp, err := hc.Get("http:s//127.0.0.1:2379/health")
 	if err != nil {
 		return healthy.Health, fmt.Errorf("Failed to get /health for host [%s]: %v", host.Address, err)
 	}
@@ -80,7 +80,7 @@ func getHealthEtcd(hc http.Client, host *hosts.Host) (string, error) {
 func getEtcdInitialCluster(hosts []*hosts.Host) string {
 	initialCluster := ""
 	for i, host := range hosts {
-		initialCluster += fmt.Sprintf("etcd-%s=http://%s:2380", host.HostnameOverride, host.InternalAddress)
+		initialCluster += fmt.Sprintf("etcd-%s=https://%s:2380", host.HostnameOverride, host.InternalAddress)
 		if i < (len(hosts) - 1) {
 			initialCluster += ","
 		}
@@ -102,7 +102,7 @@ func getEtcdDialer(localConnDialerFactory hosts.DialerFactory, etcdHost *hosts.H
 func GetEtcdConnString(hosts []*hosts.Host) string {
 	connString := ""
 	for i, host := range hosts {
-		connString += "http://" + host.InternalAddress + ":2379"
+		connString += "https://" + host.InternalAddress + ":2379"
 		if i < (len(hosts) - 1) {
 			connString += ","
 		}

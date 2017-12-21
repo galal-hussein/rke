@@ -29,16 +29,16 @@ type CertificatePKI struct {
 }
 
 // StartCertificatesGeneration ...
-func StartCertificatesGeneration(ctx context.Context, cpHosts []*hosts.Host, workerHosts []*hosts.Host, clusterDomain, localConfigPath string, KubernetesServiceIP net.IP) (map[string]CertificatePKI, error) {
-	log.Infof(ctx, "[certificates] Generating kubernetes certificates")
-	certs, err := generateCerts(ctx, cpHosts, clusterDomain, localConfigPath, KubernetesServiceIP)
+func StartCertificatesGeneration(ctx context.Context, cpHosts, etcdHosts []*hosts.Host, clusterDomain, localConfigPath string, KubernetesServiceIP net.IP) (map[string]CertificatePKI, error) {
+	logrus.Infof("[certificates] Generating kubernetes certificates")
+	certs, err := generateCerts(ctx, cpHosts, etcdHosts, clusterDomain, localConfigPath, KubernetesServiceIP)
 	if err != nil {
 		return nil, err
 	}
 	return certs, nil
 }
 
-func generateCerts(ctx context.Context, cpHosts []*hosts.Host, clusterDomain, localConfigPath string, KubernetesServiceIP net.IP) (map[string]CertificatePKI, error) {
+func generateCerts(ctx context.Context, cpHosts, etcdHosts []*hosts.Host, clusterDomain, localConfigPath string, KubernetesServiceIP net.IP) (map[string]CertificatePKI, error) {
 	certs := make(map[string]CertificatePKI)
 	// generate CA certificate and key
 	log.Infof(ctx, "[certificates] Generating CA kubernetes certificates")
@@ -60,7 +60,7 @@ func generateCerts(ctx context.Context, cpHosts []*hosts.Host, clusterDomain, lo
 	// generate API certificate and key
 	log.Infof(ctx, "[certificates] Generating Kubernetes API server certificates")
 	kubeAPIAltNames := GetAltNames(cpHosts, clusterDomain, KubernetesServiceIP)
-	kubeAPICrt, kubeAPIKey, err := GenerateKubeAPICertAndKey(caCrt, caKey, kubeAPIAltNames)
+	kubeAPICrt, kubeAPIKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, kubeAPIAltNames, KubeAPICertName, nil, true)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func generateCerts(ctx context.Context, cpHosts []*hosts.Host, clusterDomain, lo
 
 	// generate Kube controller-manager certificate and key
 	log.Infof(ctx, "[certificates] Generating Kube Controller certificates")
-	kubeControllerCrt, kubeControllerKey, err := generateClientCertAndKey(caCrt, caKey, KubeControllerCommonName, []string{})
+	kubeControllerCrt, kubeControllerKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, KubeControllerCommonName, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func generateCerts(ctx context.Context, cpHosts []*hosts.Host, clusterDomain, lo
 
 	// generate Kube scheduler certificate and key
 	log.Infof(ctx, "[certificates] Generating Kube Scheduler certificates")
-	kubeSchedulerCrt, kubeSchedulerKey, err := generateClientCertAndKey(caCrt, caKey, KubeSchedulerCommonName, []string{})
+	kubeSchedulerCrt, kubeSchedulerKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, KubeSchedulerCommonName, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func generateCerts(ctx context.Context, cpHosts []*hosts.Host, clusterDomain, lo
 
 	// generate Kube Proxy certificate and key
 	log.Infof(ctx, "[certificates] Generating Kube Proxy certificates")
-	kubeProxyCrt, kubeProxyKey, err := generateClientCertAndKey(caCrt, caKey, KubeProxyCommonName, []string{})
+	kubeProxyCrt, kubeProxyKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, KubeProxyCommonName, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func generateCerts(ctx context.Context, cpHosts []*hosts.Host, clusterDomain, lo
 
 	// generate Kubelet certificate and key
 	log.Infof(ctx, "[certificates] Generating Node certificate")
-	nodeCrt, nodeKey, err := generateClientCertAndKey(caCrt, caKey, KubeNodeCommonName, []string{KubeNodeOrganizationName})
+	nodeCrt, nodeKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, KubeNodeCommonName, []string{KubeNodeOrganizationName}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func generateCerts(ctx context.Context, cpHosts []*hosts.Host, clusterDomain, lo
 		ConfigPath:    KubeNodeCommonName,
 	}
 	log.Infof(ctx, "[certificates] Generating admin certificates and kubeconfig")
-	kubeAdminCrt, kubeAdminKey, err := generateClientCertAndKey(caCrt, caKey, KubeAdminCommonName, []string{KubeAdminOrganizationName})
+	kubeAdminCrt, kubeAdminKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, KubeAdminCommonName, []string{KubeAdminOrganizationName}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -179,135 +179,24 @@ func generateCerts(ctx context.Context, cpHosts []*hosts.Host, clusterDomain, lo
 		ConfigEnvName: KubeAdminConfigENVName,
 		ConfigPath:    localConfigPath,
 	}
+	etcdAltNames := GetAltNames(etcdHosts, clusterDomain, KubernetesServiceIP)
+	for i := range etcdHosts {
+		logrus.Infof("[certificates] Generating etcd-%d certificates and key", i)
+		etcdCrt, etcdKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, etcdAltNames, EtcdCertName, nil, true)
+		if err != nil {
+			return nil, err
+		}
+		etcdName := getEtcdCrtName(i)
+		certs[etcdName] = CertificatePKI{
+			Certificate: etcdCrt,
+			Key:         etcdKey,
+			Name:        etcdName,
+			CommonName:  etcdName,
+			EnvName:     fmt.Sprintf("%s_%d", EtcdCertENVName, i),
+			KeyEnvName:  fmt.Sprintf("%s_%d_KEY", EtcdCertENVName, i),
+			Path:        fmt.Sprintf("%s-%d.pem", EtcdKeyCertPathPrefix, i),
+			KeyPath:     fmt.Sprintf("%s-%d-key.pem", EtcdKeyCertPathPrefix, i),
+		}
+	}
 	return certs, nil
-}
-
-func generateClientCertAndKey(caCrt *x509.Certificate, caKey *rsa.PrivateKey, commonName string, orgs []string) (*x509.Certificate, *rsa.PrivateKey, error) {
-	rootKey, err := cert.NewPrivateKey()
-	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to generate private key for %s certificate: %v", commonName, err)
-	}
-	caConfig := cert.Config{
-		CommonName:   commonName,
-		Organization: orgs,
-		Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-	}
-	clientCert, err := cert.NewSignedCert(caConfig, rootKey, caCrt, caKey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to generate %s certificate: %v", commonName, err)
-	}
-
-	return clientCert, rootKey, nil
-}
-
-func GenerateKubeAPICertAndKey(caCrt *x509.Certificate, caKey *rsa.PrivateKey, altNames *cert.AltNames) (*x509.Certificate, *rsa.PrivateKey, error) {
-	rootKey, err := cert.NewPrivateKey()
-	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to generate private key for kube-apiserver certificate: %v", err)
-	}
-	caConfig := cert.Config{
-		CommonName: KubeAPICertName,
-		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		AltNames:   *altNames,
-	}
-	kubeCACert, err := cert.NewSignedCert(caConfig, rootKey, caCrt, caKey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to generate kube-apiserver certificate: %v", err)
-	}
-
-	return kubeCACert, rootKey, nil
-}
-
-func GenerateCertWithKey(commonName string, key *rsa.PrivateKey, caCrt *x509.Certificate, caKey *rsa.PrivateKey, altNames *cert.AltNames) (*x509.Certificate, error) {
-	caConfig := cert.Config{
-		CommonName: commonName,
-		Usages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth,
-			x509.ExtKeyUsageServerAuth},
-		AltNames: *altNames,
-	}
-	cert, err := cert.NewSignedCert(caConfig, key, caCrt, caKey)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to generate certificate with existing key: %v", err)
-	}
-	return cert, nil
-}
-
-func generateCACertAndKey() (*x509.Certificate, *rsa.PrivateKey, error) {
-	rootKey, err := cert.NewPrivateKey()
-	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to generate private key for CA certificate: %v", err)
-	}
-	caConfig := cert.Config{
-		CommonName: CACertName,
-	}
-	kubeCACert, err := cert.NewSelfSignedCACert(caConfig, rootKey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to generate CA certificate: %v", err)
-	}
-
-	return kubeCACert, rootKey, nil
-}
-
-func GetAltNames(cpHosts []*hosts.Host, clusterDomain string, KubernetesServiceIP net.IP) *cert.AltNames {
-	ips := []net.IP{}
-	dnsNames := []string{}
-	for _, host := range cpHosts {
-		// Check if node address is a valid IP
-		if nodeIP := net.ParseIP(host.Address); nodeIP != nil {
-			ips = append(ips, nodeIP)
-		} else {
-			dnsNames = append(dnsNames, host.Address)
-		}
-
-		// Check if node internal address is a valid IP
-		if len(host.InternalAddress) != 0 && host.InternalAddress != host.Address {
-			if internalIP := net.ParseIP(host.InternalAddress); internalIP != nil {
-				ips = append(ips, internalIP)
-			} else {
-				dnsNames = append(dnsNames, host.InternalAddress)
-			}
-		}
-		// Add hostname to the ALT dns names
-		if len(host.HostnameOverride) != 0 && host.HostnameOverride != host.Address {
-			dnsNames = append(dnsNames, host.HostnameOverride)
-		}
-	}
-	ips = append(ips, net.ParseIP("127.0.0.1"))
-	ips = append(ips, KubernetesServiceIP)
-	dnsNames = append(dnsNames, []string{
-		"localhost",
-		"kubernetes",
-		"kubernetes.default",
-		"kubernetes.default.svc",
-		"kubernetes.default.svc." + clusterDomain,
-	}...)
-	return &cert.AltNames{
-		IPs:      ips,
-		DNSNames: dnsNames,
-	}
-}
-
-func (c *CertificatePKI) ToEnv() []string {
-	env := []string{
-		c.CertToEnv(),
-		c.KeyToEnv(),
-	}
-	if c.Config != "" {
-		env = append(env, c.ConfigToEnv())
-	}
-	return env
-}
-
-func (c *CertificatePKI) CertToEnv() string {
-	encodedCrt := cert.EncodeCertPEM(c.Certificate)
-	return fmt.Sprintf("%s=%s", c.EnvName, string(encodedCrt))
-}
-
-func (c *CertificatePKI) KeyToEnv() string {
-	encodedKey := cert.EncodePrivateKeyPEM(c.Key)
-	return fmt.Sprintf("%s=%s", c.KeyEnvName, string(encodedKey))
-}
-
-func (c *CertificatePKI) ConfigToEnv() string {
-	return fmt.Sprintf("%s=%s", c.ConfigEnvName, c.Config)
 }

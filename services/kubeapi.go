@@ -46,7 +46,10 @@ func buildKubeAPIConfig(host *hosts.Host, kubeAPIService v3.KubeAPIService, etcd
 			"--client-ca-file=" + pki.CACertPath,
 			"--tls-cert-file=" + pki.KubeAPICertPath,
 			"--tls-private-key-file=" + pki.KubeAPIKeyPath,
-			"--service-account-key-file=" + pki.KubeAPIKeyPath},
+			"--service-account-key-file=" + pki.KubeAPIKeyPath,
+			"--etcd-cafile=" + pki.CACertPath,
+			"--etcd-certfile=" + pki.KubeAPICertPath,
+			"--etcd-keyfile=" + pki.KubeAPIKeyPath},
 	}
 	if authorizationMode == RBACAuthorizationMode {
 		imageCfg.Cmd = append(imageCfg.Cmd, "--authorization-mode=RBAC")

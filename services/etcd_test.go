@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/rancher/rke/hosts"
+	"github.com/rancher/rke/pki"
 	"github.com/rancher/types/apis/management.cattle.io/v3"
 )
 
 const (
-	TestInitEtcdClusterString = "etcd-etcd1=http://1.1.1.1:2380,etcd-etcd2=http://2.2.2.2:2380"
+	TestInitEtcdClusterString = "etcd-etcd1=https://1.1.1.1:2380,etcd-etcd2=https://2.2.2.2:2380"
 	TestEtcdImage             = "etcd/etcdImage:latest"
 	TestEtcdNamePrefix        = "--name=etcd-"
 	TestEtcdVolumeBind        = "/var/lib/etcd:/etcd-data"
@@ -45,8 +46,9 @@ func TestEtcdConfig(t *testing.T) {
 	initCluster := getEtcdInitialCluster(etcdHosts)
 	assertEqual(t, initCluster, TestInitEtcdClusterString, "")
 
-	for _, host := range etcdHosts {
-		imageCfg, hostCfg := buildEtcdConfig(host, etcdService, TestInitEtcdClusterString)
+	for i, host := range etcdHosts {
+		nodeName := pki.GetEtcdEnvNodeName(i)
+		imageCfg, hostCfg := buildEtcdConfig(host, etcdService, TestInitEtcdClusterString, nodeName)
 		assertEqual(t, isStringInSlice(TestEtcdNamePrefix+host.HostnameOverride, imageCfg.Cmd), true,
 			fmt.Sprintf("Failed to find [%s] in Etcd command", TestEtcdNamePrefix+host.HostnameOverride))
 		assertEqual(t, TestEtcdImage, imageCfg.Image,

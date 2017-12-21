@@ -22,7 +22,7 @@ func SetUpAuthentication(ctx context.Context, kubeCluster, currentCluster *Clust
 		} else {
 			kubeCluster.Certificates, err = pki.StartCertificatesGeneration(ctx,
 				kubeCluster.ControlPlaneHosts,
-				kubeCluster.WorkerHosts,
+				kubeCluster.EtcdHosts,
 				kubeCluster.ClusterDomain,
 				kubeCluster.LocalKubeConfigPath,
 				kubeCluster.KubernetesServiceIP)
@@ -40,7 +40,7 @@ func regenerateAPICertificate(c *Cluster, certificates map[string]pki.Certificat
 	caCrt := certificates[pki.CACertName].Certificate
 	caKey := certificates[pki.CACertName].Key
 	kubeAPIKey := certificates[pki.KubeAPICertName].Key
-	kubeAPICert, err := pki.GenerateCertWithKey(pki.KubeAPICertName, kubeAPIKey, caCrt, caKey, kubeAPIAltNames)
+	kubeAPICert, _, err := pki.GenerateSignedCertAndKey(caCrt, caKey, kubeAPIKey, kubeAPIAltNames, pki.KubeAPICertName, nil, true)
 	if err != nil {
 		return nil, err
 	}

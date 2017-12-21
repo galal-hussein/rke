@@ -1,0 +1,26 @@
+package network
+
+const (
+	EtcdEndpoints    = "etcdEndpoints"
+	APIRoot          = "apiRoot"
+	ClientCert       = "clientCert"
+	ClientCertPath   = "clientCertPath"
+	ClientKey        = "clientKey"
+	ClientKeyPath    = "clientKeyPath"
+	ClientCA         = "clientCA"
+	ClientCAPath     = "clientCAPath"
+	KubeCfg          = "kubeCfg"
+	ClusterCIDR      = "clusterCIDR"
+	CNIImage         = "cniImage"
+	NodeImage        = "nodeImage"
+	ControllersImage = "controllersImage"
+	CalicoctlImage   = "calicoctlImage"
+	FlannelImage     = "flannelImage"
+	FlannelCNIImage  = "flannelCNIImage"
+	FlannelIface     = "flannelIface"
+	CloudProvider    = "cloudprovider"
+	AWSCloudProvider = "aws"
+	RBACConfig       = "rbacConfig"
+	WeaveImage       = "weaveImage"
+	WeaveCNIImage    = "weaveCNIImage"
+)

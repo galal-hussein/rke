@@ -12,6 +12,7 @@ import (
 	"github.com/rancher/rke/docker"
 	"github.com/rancher/rke/hosts"
 	"github.com/rancher/rke/log"
+	"github.com/rancher/rke/pki"
 	"github.com/rancher/types/apis/management.cattle.io/v3"
 	"github.com/sirupsen/logrus"
 )
@@ -19,8 +20,9 @@ import (
 func RunEtcdPlane(ctx context.Context, etcdHosts []*hosts.Host, etcdService v3.ETCDService, localConnDialerFactory hosts.DialerFactory) error {
 	log.Infof(ctx, "[%s] Building up Etcd Plane..", ETCDRole)
 	initCluster := getEtcdInitialCluster(etcdHosts)
-	for _, host := range etcdHosts {
-		imageCfg, hostCfg := buildEtcdConfig(host, etcdService, initCluster)
+	for i, host := range etcdHosts {
+		nodeName := pki.GetEtcdEnvNodeName(i)
+		imageCfg, hostCfg := buildEtcdConfig(host, etcdService, initCluster, nodeName)
 		err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, EtcdContainerName, host.Address, ETCDRole)
 		if err != nil {
 			return err
@@ -42,7 +44,7 @@ func RemoveEtcdPlane(ctx context.Context, etcdHosts []*hosts.Host) error {
 	return nil
 }
 
-func buildEtcdConfig(host *hosts.Host, etcdService v3.ETCDService, initCluster string) (*container.Config, *container.HostConfig) {
+func buildEtcdConfig(host *hosts.Host, etcdService v3.ETCDService, initCluster, nodeName string) (*container.Config, *container.HostConfig) {
 	clusterState := "new"
 	if host.ExistingEtcdCluster {
 		clusterState = "existing"
@@ -52,18 +54,29 @@ func buildEtcdConfig(host *hosts.Host, etcdService v3.ETCDService, initCluster s
 		Cmd: []string{"/usr/local/bin/etcd",
 			"--name=etcd-" + host.HostnameOverride,
 			"--data-dir=/etcd-data",
-			"--advertise-client-urls=http://" + host.InternalAddress + ":2379,http://" + host.InternalAddress + ":4001",
-			"--listen-client-urls=http://0.0.0.0:2379",
-			"--initial-advertise-peer-urls=http://" + host.InternalAddress + ":2380",
-			"--listen-peer-urls=http://0.0.0.0:2380",
+			"--advertise-client-urls=https://" + host.InternalAddress + ":2379,https://" + host.InternalAddress + ":4001",
+			"--listen-client-urls=https://0.0.0.0:2379",
+			"--initial-advertise-peer-urls=https://" + host.InternalAddress + ":2380",
+			"--listen-peer-urls=https://0.0.0.0:2380",
 			"--initial-cluster-token=etcd-cluster-1",
 			"--initial-cluster=" + initCluster,
-			"--initial-cluster-state=" + clusterState},
+			"--initial-cluster-state=" + clusterState,
+			"--peer-client-cert-auth",
+			"--client-cert-auth",
+			"--trusted-ca-file=" + pki.CACertPath,
+			"--peer-trusted-ca-file=" + pki.CACertPath,
+			fmt.Sprintf("--cert-file=%s.pem", nodeName),
+			fmt.Sprintf("--key-file=%s-key.pem", nodeName),
+			fmt.Sprintf("--peer-cert-file=%s.pem", nodeName),
+			fmt.Sprintf("--peer-key-file=%s-key.pem", nodeName),
+		},
 	}
 	hostCfg := &container.HostConfig{
 		RestartPolicy: container.RestartPolicy{Name: "always"},
 		Binds: []string{
-			"/var/lib/etcd:/etcd-data"},
+			"/var/lib/etcd:/etcd-data",
+			"/etc/kubernetes:/etc/kubernetes",
+		},
 		PortBindings: nat.PortMap{
 			"2379/tcp": []nat.PortBinding{
 				{
@@ -89,7 +102,7 @@ func buildEtcdConfig(host *hosts.Host, etcdService v3.ETCDService, initCluster s
 
 func AddEtcdMember(ctx context.Context, etcdHost *hosts.Host, etcdHosts []*hosts.Host, localConnDialerFactory hosts.DialerFactory) error {
 	log.Infof(ctx, "[add/%s] Adding member [etcd-%s] to etcd cluster", ETCDRole, etcdHost.HostnameOverride)
-	peerURL := fmt.Sprintf("http://%s:2380", etcdHost.InternalAddress)
+	peerURL := fmt.Sprintf("https://%s:2380", etcdHost.InternalAddress)
 	added := false
 	for _, host := range etcdHosts {
 		etcdClient, err := getEtcdClient(ctx, host, localConnDialerFactory)
@@ -158,7 +171,7 @@ func ReloadEtcdCluster(ctx context.Context, etcdHosts []*hosts.Host, etcdService
 	}
 	initCluster := getEtcdInitialCluster(readyEtcdHosts)
 	for _, host := range readyEtcdHosts {
-		imageCfg, hostCfg := buildEtcdConfig(host, etcdService, initCluster)
+		imageCfg, hostCfg := buildEtcdConfig(host, etcdService, initCluster, "")
 		if err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, EtcdContainerName, host.Address, ETCDRole); err != nil {
 			return err
 		}
