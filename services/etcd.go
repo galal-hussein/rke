@@ -21,7 +21,7 @@ func RunEtcdPlane(ctx context.Context, etcdHosts []*hosts.Host, etcdService v3.E
 	log.Infof(ctx, "[%s] Building up Etcd Plane..", ETCDRole)
 	initCluster := getEtcdInitialCluster(etcdHosts)
 	for i, host := range etcdHosts {
-		nodeName := pki.GetEtcdEnvNodeName(i)
+		nodeName := pki.GetEtcdCrtName(i)
 		imageCfg, hostCfg := buildEtcdConfig(host, etcdService, initCluster, nodeName)
 		err := docker.DoRunContainer(ctx, host.DClient, imageCfg, hostCfg, EtcdContainerName, host.Address, ETCDRole)
 		if err != nil {
@@ -63,12 +63,12 @@ func buildEtcdConfig(host *hosts.Host, etcdService v3.ETCDService, initCluster, 
 			"--initial-cluster-state=" + clusterState,
 			"--peer-client-cert-auth",
 			"--client-cert-auth",
-			"--trusted-ca-file=" + pki.CACertPath,
-			"--peer-trusted-ca-file=" + pki.CACertPath,
-			fmt.Sprintf("--cert-file=%s.pem", nodeName),
-			fmt.Sprintf("--key-file=%s-key.pem", nodeName),
-			fmt.Sprintf("--peer-cert-file=%s.pem", nodeName),
-			fmt.Sprintf("--peer-key-file=%s-key.pem", nodeName),
+			"--trusted-ca-file=" + pki.GetCertPath(pki.CACertName),
+			"--peer-trusted-ca-file=" + pki.GetCertPath(pki.CACertName),
+			"--cert-file=" + pki.GetCertPath(nodeName),
+			"--key-file=" + pki.GetKeyPath(nodeName),
+			"--peer-cert-file=" + pki.GetCertPath(nodeName),
+			"--peer-key-file=" + pki.GetKeyPath(nodeName),
 		},
 	}
 	hostCfg := &container.HostConfig{

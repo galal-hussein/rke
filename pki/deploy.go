@@ -20,10 +20,10 @@ func DeployCertificatesOnMasters(ctx context.Context, cpHosts []*hosts.Host, crt
 	crtList := []string{
 		CACertName,
 		KubeAPICertName,
-		KubeControllerName,
-		KubeSchedulerName,
-		KubeProxyName,
-		KubeNodeName,
+		KubeControllerCertName,
+		KubeSchedulerCertName,
+		KubeProxyCertName,
+		KubeNodeCertName,
 	}
 	env := []string{}
 	for _, crtName := range crtList {
@@ -44,8 +44,8 @@ func DeployCertificatesOnWorkers(ctx context.Context, workerHosts []*hosts.Host,
 	// list of certificates that should be deployed on the workers
 	crtList := []string{
 		CACertName,
-		KubeProxyName,
-		KubeNodeName,
+		KubeProxyCertName,
+		KubeNodeCertName,
 	}
 	env := []string{}
 	for _, crtName := range crtList {
@@ -68,7 +68,7 @@ func DeployCertificatesOnEtcd(ctx context.Context, etcdHosts []*hosts.Host, crtM
 		CACertName,
 	}
 	for i := range etcdHosts {
-		crtList = append(crtList, getEtcdCrtName(i))
+		crtList = append(crtList, GetEtcdCrtName(i))
 	}
 	env := []string{}
 	for _, crtName := range crtList {

@@ -47,7 +47,7 @@ func TestEtcdConfig(t *testing.T) {
 	assertEqual(t, initCluster, TestInitEtcdClusterString, "")
 
 	for i, host := range etcdHosts {
-		nodeName := pki.GetEtcdEnvNodeName(i)
+		nodeName := pki.GetEtcdCrtName(i)
 		imageCfg, hostCfg := buildEtcdConfig(host, etcdService, TestInitEtcdClusterString, nodeName)
 		assertEqual(t, isStringInSlice(TestEtcdNamePrefix+host.HostnameOverride, imageCfg.Cmd), true,
 			fmt.Sprintf("Failed to find [%s] in Etcd command", TestEtcdNamePrefix+host.HostnameOverride))

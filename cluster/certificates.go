@@ -60,11 +60,11 @@ func getClusterCerts(ctx context.Context, kubeClient *kubernetes.Clientset) (map
 	certificatesNames := []string{
 		pki.CACertName,
 		pki.KubeAPICertName,
-		pki.KubeNodeName,
-		pki.KubeProxyName,
-		pki.KubeControllerName,
-		pki.KubeSchedulerName,
-		pki.KubeAdminCommonName,
+		pki.KubeNodeCertName,
+		pki.KubeProxyCertName,
+		pki.KubeControllerCertName,
+		pki.KubeSchedulerCertName,
+		pki.KubeAdminCertName,
 	}
 	certMap := make(map[string]pki.CertificatePKI)
 	for _, certName := range certificatesNames {

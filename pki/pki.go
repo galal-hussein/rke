@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
-	"fmt"
 	"net"
 
 	"github.com/rancher/rke/hosts"
@@ -46,16 +45,7 @@ func generateCerts(ctx context.Context, cpHosts, etcdHosts []*hosts.Host, cluste
 	if err != nil {
 		return nil, err
 	}
-	logrus.Debugf("[certificates] CA Certificate: %s", string(cert.EncodeCertPEM(caCrt)))
-	certs[CACertName] = CertificatePKI{
-		Certificate: caCrt,
-		Key:         caKey,
-		Name:        CACertName,
-		EnvName:     CACertENVName,
-		KeyEnvName:  CAKeyENVName,
-		Path:        CACertPath,
-		KeyPath:     CAKeyPath,
-	}
+	certs[CACertName] = ToCertObject(CACertName, "", "", caCrt, caKey)
 
 	// generate API certificate and key
 	log.Infof(ctx, "[certificates] Generating Kubernetes API server certificates")
@@ -64,79 +54,31 @@ func generateCerts(ctx context.Context, cpHosts, etcdHosts []*hosts.Host, cluste
 	if err != nil {
 		return nil, err
 	}
-	logrus.Debugf("[certificates] Kube API Certificate: %s", string(cert.EncodeCertPEM(kubeAPICrt)))
-	certs[KubeAPICertName] = CertificatePKI{
-		Certificate: kubeAPICrt,
-		Key:         kubeAPIKey,
-		Name:        KubeAPICertName,
-		EnvName:     KubeAPICertENVName,
-		KeyEnvName:  KubeAPIKeyENVName,
-		Path:        KubeAPICertPath,
-		KeyPath:     KubeAPIKeyPath,
-	}
+	certs[KubeAPICertName] = ToCertObject(KubeAPICertName, "", "", kubeAPICrt, kubeAPIKey)
 
 	// generate Kube controller-manager certificate and key
 	log.Infof(ctx, "[certificates] Generating Kube Controller certificates")
-	kubeControllerCrt, kubeControllerKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, KubeControllerCommonName, nil, false)
+	kubeControllerCrt, kubeControllerKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, getDefaultCN(KubeControllerCertName), nil, false)
 	if err != nil {
 		return nil, err
 	}
-	logrus.Debugf("[certificates] Kube Controller Certificate: %s", string(cert.EncodeCertPEM(kubeControllerCrt)))
-	certs[KubeControllerName] = CertificatePKI{
-		Certificate:   kubeControllerCrt,
-		Key:           kubeControllerKey,
-		Config:        getKubeConfigX509("https://127.0.0.1:6443", KubeControllerName, CACertPath, KubeControllerCertPath, KubeControllerKeyPath),
-		Name:          KubeControllerName,
-		CommonName:    KubeControllerCommonName,
-		EnvName:       KubeControllerCertENVName,
-		KeyEnvName:    KubeControllerKeyENVName,
-		Path:          KubeControllerCertPath,
-		KeyPath:       KubeControllerKeyPath,
-		ConfigEnvName: KubeControllerConfigENVName,
-		ConfigPath:    KubeControllerConfigPath,
-	}
+	certs[KubeControllerCertName] = ToCertObject(KubeControllerCertName, "", "", kubeControllerCrt, kubeControllerKey)
 
 	// generate Kube scheduler certificate and key
 	log.Infof(ctx, "[certificates] Generating Kube Scheduler certificates")
-	kubeSchedulerCrt, kubeSchedulerKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, KubeSchedulerCommonName, nil, false)
+	kubeSchedulerCrt, kubeSchedulerKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, getDefaultCN(KubeSchedulerCertName), nil, false)
 	if err != nil {
 		return nil, err
 	}
-	logrus.Debugf("[certificates] Kube Scheduler Certificate: %s", string(cert.EncodeCertPEM(kubeSchedulerCrt)))
-	certs[KubeSchedulerName] = CertificatePKI{
-		Certificate:   kubeSchedulerCrt,
-		Key:           kubeSchedulerKey,
-		Config:        getKubeConfigX509("https://127.0.0.1:6443", KubeSchedulerName, CACertPath, KubeSchedulerCertPath, KubeSchedulerKeyPath),
-		Name:          KubeSchedulerName,
-		CommonName:    KubeSchedulerCommonName,
-		EnvName:       KubeSchedulerCertENVName,
-		KeyEnvName:    KubeSchedulerKeyENVName,
-		Path:          KubeSchedulerCertPath,
-		KeyPath:       KubeSchedulerKeyPath,
-		ConfigEnvName: KubeSchedulerConfigENVName,
-		ConfigPath:    KubeSchedulerConfigPath,
-	}
+	certs[KubeSchedulerCertName] = ToCertObject(KubeSchedulerCertName, "", "", kubeSchedulerCrt, kubeSchedulerKey)
 
 	// generate Kube Proxy certificate and key
 	log.Infof(ctx, "[certificates] Generating Kube Proxy certificates")
-	kubeProxyCrt, kubeProxyKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, KubeProxyCommonName, nil, false)
+	kubeProxyCrt, kubeProxyKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, getDefaultCN(KubeProxyCertName), nil, false)
 	if err != nil {
 		return nil, err
 	}
-	logrus.Debugf("[certificates] Kube Proxy Certificate: %s", string(cert.EncodeCertPEM(kubeProxyCrt)))
-	certs[KubeProxyName] = CertificatePKI{
-		Certificate:   kubeProxyCrt,
-		Key:           kubeProxyKey,
-		Config:        getKubeConfigX509("https://127.0.0.1:6443", KubeProxyName, CACertPath, KubeProxyCertPath, KubeProxyKeyPath),
-		Name:          KubeProxyName,
-		CommonName:    KubeProxyCommonName,
-		EnvName:       KubeProxyCertENVName,
-		Path:          KubeProxyCertPath,
-		KeyEnvName:    KubeProxyKeyENVName,
-		KeyPath:       KubeProxyKeyPath,
-		ConfigEnvName: KubeProxyConfigENVName,
-		ConfigPath:    KubeProxyConfigPath,
-	}
+	certs[KubeProxyCertName] = ToCertObject(KubeProxyCertName, "", "", kubeProxyCrt, kubeProxyKey)
 
 	// generate Kubelet certificate and key
 	log.Infof(ctx, "[certificates] Generating Node certificate")
@@ -144,59 +86,39 @@ func generateCerts(ctx context.Context, cpHosts, etcdHosts []*hosts.Host, cluste
 	if err != nil {
 		return nil, err
 	}
-	logrus.Debugf("[certificates] Node Certificate: %s", string(cert.EncodeCertPEM(kubeProxyCrt)))
-	certs[KubeNodeName] = CertificatePKI{
-		Certificate:   nodeCrt,
-		Key:           nodeKey,
-		Config:        getKubeConfigX509("https://127.0.0.1:6443", KubeNodeName, CACertPath, KubeNodeCertPath, KubeNodeKeyPath),
-		Name:          KubeNodeName,
-		CommonName:    KubeNodeCommonName,
-		OUName:        KubeNodeOrganizationName,
-		EnvName:       KubeNodeCertENVName,
-		KeyEnvName:    KubeNodeKeyENVName,
-		Path:          KubeNodeCertPath,
-		KeyPath:       KubeNodeKeyPath,
-		ConfigEnvName: KubeNodeConfigENVName,
-		ConfigPath:    KubeNodeCommonName,
-	}
-	log.Infof(ctx, "[certificates] Generating admin certificates and kubeconfig")
-	kubeAdminCrt, kubeAdminKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, KubeAdminCommonName, []string{KubeAdminOrganizationName}, false)
+	certs[KubeNodeCertName] = ToCertObject(KubeNodeCertName, KubeNodeCommonName, KubeNodeOrganizationName, nodeCrt, nodeKey)
+
+	// generate Admin certificate and key
+	logrus.Infof("[certificates] Generating admin certificates and kubeconfig")
+	kubeAdminCrt, kubeAdminKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, nil, KubeAdminCertName, []string{KubeAdminOrganizationName}, false)
 	if err != nil {
 		return nil, err
 	}
-	logrus.Debugf("[certificates] Admin Certificate: %s", string(cert.EncodeCertPEM(kubeAdminCrt)))
-	certs[KubeAdminCommonName] = CertificatePKI{
+	kubeAdminConfig := GetKubeConfigX509WithData(
+		"https://"+cpHosts[0].Address+":6443",
+		KubeAdminCertName,
+		string(cert.EncodeCertPEM(caCrt)),
+		string(cert.EncodeCertPEM(kubeAdminCrt)),
+		string(cert.EncodePrivateKeyPEM(kubeAdminKey)))
+
+	certs[KubeAdminCertName] = CertificatePKI{
 		Certificate: kubeAdminCrt,
 		Key:         kubeAdminKey,
-		Config: GetKubeConfigX509WithData(
-			"https://"+cpHosts[0].Address+":6443",
-			KubeAdminCommonName,
-			string(cert.EncodeCertPEM(caCrt)),
-			string(cert.EncodeCertPEM(kubeAdminCrt)),
-			string(cert.EncodePrivateKeyPEM(kubeAdminKey))),
-		CommonName:    KubeAdminCommonName,
-		OUName:        KubeAdminOrganizationName,
-		ConfigEnvName: KubeAdminConfigENVName,
-		ConfigPath:    localConfigPath,
+		Config:      kubeAdminConfig,
+		CommonName:  KubeAdminCertName,
+		OUName:      KubeAdminOrganizationName,
+		ConfigPath:  localConfigPath,
 	}
+
 	etcdAltNames := GetAltNames(etcdHosts, clusterDomain, KubernetesServiceIP)
 	for i := range etcdHosts {
-		logrus.Infof("[certificates] Generating etcd-%d certificates and key", i)
+		logrus.Infof("[certificates] Generating etcd-%d certificate and key", i)
 		etcdCrt, etcdKey, err := GenerateSignedCertAndKey(caCrt, caKey, nil, etcdAltNames, EtcdCertName, nil, true)
 		if err != nil {
 			return nil, err
 		}
-		etcdName := getEtcdCrtName(i)
-		certs[etcdName] = CertificatePKI{
-			Certificate: etcdCrt,
-			Key:         etcdKey,
-			Name:        etcdName,
-			CommonName:  etcdName,
-			EnvName:     fmt.Sprintf("%s_%d", EtcdCertENVName, i),
-			KeyEnvName:  fmt.Sprintf("%s_%d_KEY", EtcdCertENVName, i),
-			Path:        fmt.Sprintf("%s-%d.pem", EtcdKeyCertPathPrefix, i),
-			KeyPath:     fmt.Sprintf("%s-%d-key.pem", EtcdKeyCertPathPrefix, i),
-		}
+		etcdName := GetEtcdCrtName(i)
+		certs[etcdName] = ToCertObject(etcdName, "", "", etcdCrt, etcdKey)
 	}
 	return certs, nil
 }

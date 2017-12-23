@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/rancher/rke/log"
-	"github.com/rancher/rke/pki"
 	"github.com/rancher/rke/services"
 	"github.com/rancher/rke/templates"
 )
@@ -97,12 +96,12 @@ func (c *Cluster) doFlannelDeploy(ctx context.Context) error {
 
 func (c *Cluster) doCalicoDeploy(ctx context.Context) error {
 	calicoConfig := map[string]string{
-		EtcdEndpoints:    services.GetEtcdConnString(c.EtcdHosts),
-		APIRoot:          "https://127.0.0.1:6443",
-		ClientCert:       pki.KubeNodeCertPath,
-		ClientKey:        pki.KubeNodeKeyPath,
-		ClientCA:         pki.CACertPath,
-		KubeCfg:          pki.KubeNodeConfigPath,
+		EtcdEndpoints: services.GetEtcdConnString(c.EtcdHosts),
+		APIRoot:       "https://127.0.0.1:6443",
+		// ClientCert:       pki.KubeNodeCertPath,
+		// ClientKey:        pki.KubeNodeKeyPath,
+		// ClientCA:         pki.CACertPath,
+		// KubeCfg:          pki.KubeNodeConfigPath,
 		ClusterCIDR:      c.ClusterCIDR,
 		CNIImage:         c.Network.Options[CalicoCNIImage],
 		NodeImage:        c.Network.Options[CalicoNodeImage],
@@ -120,11 +119,11 @@ func (c *Cluster) doCalicoDeploy(ctx context.Context) error {
 
 func (c *Cluster) doCanalDeploy(ctx context.Context) error {
 	canalConfig := map[string]string{
-		ClientCert:      pki.KubeNodeCertPath,
-		APIRoot:         "https://127.0.0.1:6443",
-		ClientKey:       pki.KubeNodeKeyPath,
-		ClientCA:        pki.CACertPath,
-		KubeCfg:         pki.KubeNodeConfigPath,
+		// ClientCert:      pki.KubeNodeCertPath,
+		APIRoot: "https://127.0.0.1:6443",
+		// ClientKey:       pki.KubeNodeKeyPath,
+		// ClientCA:        pki.CACertPath,
+		// KubeCfg:         pki.KubeNodeConfigPath,
 		ClusterCIDR:     c.ClusterCIDR,
 		NodeImage:       c.Network.Options[CanalNodeImage],
 		CNIImage:        c.Network.Options[CanalCNIImage],

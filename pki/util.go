@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/rancher/rke/hosts"
 	"k8s.io/client-go/util/cert"
@@ -127,10 +128,68 @@ func (c *CertificatePKI) ConfigToEnv() string {
 	return fmt.Sprintf("%s=%s", c.ConfigEnvName, c.Config)
 }
 
-func GetEtcdEnvNodeName(index int) string {
-	return fmt.Sprintf("%s-%d", EtcdKeyCertPathPrefix, index)
+func getEnvFromName(name string) string {
+	return strings.Replace(strings.ToUpper(name), "-", "_", -1)
 }
 
-func getEtcdCrtName(index int) string {
+func getKeyEnvFromEnv(env string) string {
+	return fmt.Sprintf("%s_KEY", env)
+}
+
+func getConfigEnvFromEnv(env string) string {
+	return fmt.Sprintf("KUBECFG_%s", env)
+}
+
+func GetEtcdCrtName(index int) string {
 	return fmt.Sprintf("%s-%d", EtcdCertName, index)
+}
+
+func GetCertPath(name string) string {
+	return fmt.Sprintf("%s%s.pem", CertPathPrefix, name)
+}
+
+func GetKeyPath(name string) string {
+	return fmt.Sprintf("%s%s-key.pem", CertPathPrefix, name)
+}
+
+func GetConfigPath(name string) string {
+	return fmt.Sprintf("%skubecfg-%s.yaml", CertPathPrefix, name)
+}
+
+func ToCertObject(componentName, commonName, ouName string, cert *x509.Certificate, key *rsa.PrivateKey) CertificatePKI {
+	var config, configPath, configEnvName string
+	if len(commonName) == 0 {
+		commonName = getDefaultCN(componentName)
+	}
+
+	envName := getEnvFromName(componentName)
+	keyEnvName := getKeyEnvFromEnv(envName)
+	caCertPath := GetCertPath(CACertName)
+	path := GetCertPath(componentName)
+	keyPath := GetKeyPath(componentName)
+
+	if componentName != CACertName && componentName != KubeAPICertName && !strings.Contains(componentName, EtcdCertName) {
+		config = getKubeConfigX509("https://127.0.0.1:6443", componentName, caCertPath, path, keyPath)
+		configPath = GetConfigPath(componentName)
+		configEnvName = getConfigEnvFromEnv(envName)
+	}
+
+	return CertificatePKI{
+		Certificate:   cert,
+		Key:           key,
+		Config:        config,
+		Name:          componentName,
+		CommonName:    commonName,
+		OUName:        ouName,
+		EnvName:       envName,
+		KeyEnvName:    keyEnvName,
+		ConfigEnvName: configEnvName,
+		Path:          path,
+		KeyPath:       keyPath,
+		ConfigPath:    configPath,
+	}
+}
+
+func getDefaultCN(name string) string {
+	return fmt.Sprintf("system:%s", name)
 }

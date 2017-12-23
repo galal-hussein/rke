@@ -79,7 +79,7 @@ func (c *Cluster) SetUpHosts(ctx context.Context) error {
 			return err
 		}
 
-		err = pki.DeployAdminConfig(ctx, c.Certificates[pki.KubeAdminCommonName].Config, c.LocalKubeConfigPath)
+		err = pki.DeployAdminConfig(ctx, c.Certificates[pki.KubeAdminCertName].Config, c.LocalKubeConfigPath)
 		if err != nil {
 			return err
 		}
