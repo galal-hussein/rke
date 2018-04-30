@@ -375,6 +375,9 @@ Depending how you want to manage your ssl certificates, there are 2 deployment o
   - Update ssl certificate and key at `cattle-keys-ingress` secret, <BASE64_CRT> and <BASE64_KEY>. Content must be in base64 format, `cat <FILE> | base64`. If selfsigned, certificate and key must be signed by same CA.  
   - Run RKE.
 
+> NOTE: If you are setting up Amazon ALB in front of rancher 2.0 server then you need to set up the ingress with no FQDN, so that ALB healthcheck will not be redirected to the default backend and fail.
+
+
   ```bash
   rke up --config rancher-minimal-ssl.yml
   ```
