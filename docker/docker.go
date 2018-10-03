@@ -81,8 +81,19 @@ func DoRunContainer(ctx context.Context, dClient *client.Client, imageCfg *conta
 		if err != nil {
 			return err
 		}
+		var upgrErr error
 		if isUpgradable {
-			return DoRollingUpdateContainer(ctx, dClient, imageCfg, hostCfg, containerName, hostname, plane, prsMap)
+			for retries := 0; retries <= 3; retries++ {
+				fmt.Println(retries)
+				upgrErr = DoRollingUpdateContainer(ctx, dClient, imageCfg, hostCfg, containerName, hostname, plane, prsMap)
+				if upgrErr != nil {
+					fmt.Printf("test")
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				break
+			}
+			return upgrErr
 		}
 		return nil
 	}
@@ -97,24 +108,45 @@ func DoRunContainer(ctx context.Context, dClient *client.Client, imageCfg *conta
 }
 
 func DoRollingUpdateContainer(ctx context.Context, dClient *client.Client, imageCfg *container.Config, hostCfg *container.HostConfig, containerName, hostname, plane string, prsMap map[string]v3.PrivateRegistry) error {
-	logrus.Debugf("[%s] Checking for deployed [%s]", plane, containerName)
-	isRunning, err := IsContainerRunning(ctx, dClient, hostname, containerName, false)
+	// check for old-container from broken run
+	oldContainerName := "old-" + containerName
+	logrus.Debugf("[%s] Checking for deployed [%s]", plane, oldContainerName)
+	_, err := dClient.ContainerInspect(ctx, oldContainerName)
 	if err != nil {
-		return err
+		if !client.IsErrNotFound(err) {
+			return err
+		}
+	} else {
+		logrus.Debugf("[%s] found [%s] deployed on host [%s]", plane, oldContainerName, hostname)
+		if err := dClient.ContainerRename(ctx, oldContainerName, containerName); err != nil {
+			return err
+		}
 	}
-	if !isRunning {
-		logrus.Debugf("[%s] Container %s is not running on host [%s]", plane, containerName, hostname)
+	// check for container
+	cont, err := dClient.ContainerInspect(ctx, containerName)
+	if err != nil {
+		if !client.IsErrNotFound(err) {
+			return err
+		}
+		logrus.Debugf("[%s] Container %s doesn't exist on host [%s]", plane, containerName, hostname)
 		return nil
+	}
+	if cont.State.Status != "running" {
+		// handle broken run for stopped container
+		logrus.Debugf("[%s] found [%s] deployed on host [%s] but in %s state", plane, containerName, hostname, cont.State.Status)
+		if err := StartContainer(ctx, dClient, hostname, containerName); err != nil {
+			return fmt.Errorf("Failed to start [%s] container on host [%s]: %v", containerName, hostname, err)
+		}
 	}
 	err = UseLocalOrPull(ctx, dClient, hostname, imageCfg.Image, plane, prsMap)
 	if err != nil {
 		return err
 	}
 	logrus.Debugf("[%s] Stopping old container", plane)
-	oldContainerName := "old-" + containerName
 	if err := StopRenameContainer(ctx, dClient, hostname, containerName, oldContainerName); err != nil {
 		return err
 	}
+	return fmt.Errorf("tunnel disconnect")
 	logrus.Debugf("[%s] Successfully stopped old container %s on host [%s]", plane, containerName, hostname)
 	_, err = CreateContainer(ctx, dClient, hostname, containerName, imageCfg, hostCfg)
 	if err != nil {

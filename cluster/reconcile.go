@@ -181,6 +181,12 @@ func reconcileEtcd(ctx context.Context, currentCluster, kubeCluster *Cluster, ku
 		}
 	}
 	currentCluster.Certificates = crtMap
+
+	// Handle tunnel disconnect issues
+	// if err := services.RecoverEtcdNodes(ctx, currentCluster.EtcdHosts, currentCluster.DockerDialerFactory, currentCluster.PrefixPath); err != nil {
+	// 	return err
+	// }
+
 	for _, etcdHost := range etcdToAdd {
 		// deploy certificates on new etcd host
 		if err := pki.DeployCertificatesOnHost(ctx, etcdHost, currentCluster.Certificates, kubeCluster.SystemImages.CertDownloader, pki.CertPathPrefix, kubeCluster.PrivateRegistriesMap); err != nil {

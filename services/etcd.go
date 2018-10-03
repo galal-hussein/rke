@@ -163,7 +163,16 @@ func RemoveEtcdMember(ctx context.Context, etcdHost *hosts.Host, etcdHosts []*ho
 }
 
 func ReloadEtcdCluster(ctx context.Context, readyEtcdHosts []*hosts.Host, newHost *hosts.Host, localConnDialerFactory hosts.DialerFactory, cert, key []byte, prsMap map[string]v3.PrivateRegistry, etcdNodePlanMap map[string]v3.RKEConfigNodePlan, alpineImage string) error {
-	// update the old nodes
+	// run the new etcd
+	imageCfg, hostCfg, _ := GetProcessConfig(etcdNodePlanMap[newHost.Address].Processes[EtcdContainerName])
+	if err := docker.DoRunContainer(ctx, newHost.DClient, imageCfg, hostCfg, EtcdContainerName, newHost.Address, ETCDRole, prsMap); err != nil {
+		return err
+	}
+	if err := createLogLink(ctx, newHost, EtcdContainerName, ETCDRole, alpineImage, prsMap); err != nil {
+		return err
+	}
+	time.Sleep(EtcdInitWaitTime * time.Second)
+	// update the old etcd nodes to allow multi node addition
 	for _, etcdHost := range readyEtcdHosts {
 		if etcdHost.Address == newHost.Address {
 			continue
@@ -176,14 +185,6 @@ func ReloadEtcdCluster(ctx context.Context, readyEtcdHosts []*hosts.Host, newHos
 			return err
 		}
 		time.Sleep(EtcdInitWaitTime * time.Second)
-	}
-	// run the new etcd at last
-	imageCfg, hostCfg, _ := GetProcessConfig(etcdNodePlanMap[newHost.Address].Processes[EtcdContainerName])
-	if err := docker.DoRunContainer(ctx, newHost.DClient, imageCfg, hostCfg, EtcdContainerName, newHost.Address, ETCDRole, prsMap); err != nil {
-		return err
-	}
-	if err := createLogLink(ctx, newHost, EtcdContainerName, ETCDRole, alpineImage, prsMap); err != nil {
-		return err
 	}
 	time.Sleep(10 * time.Second)
 	var healthy bool

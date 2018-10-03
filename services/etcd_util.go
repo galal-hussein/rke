@@ -11,7 +11,10 @@ import (
 	"time"
 
 	etcdclient "github.com/coreos/etcd/client"
+	"github.com/docker/docker/client"
+	"github.com/rancher/rke/docker"
 	"github.com/rancher/rke/hosts"
+	"github.com/rancher/rke/log"
 	"github.com/sirupsen/logrus"
 )
 
@@ -138,4 +141,50 @@ func getEtcdTLSConfig(certificate, key []byte) (*tls.Config, error) {
 		return nil, err
 	}
 	return tlsConfig, nil
+}
+
+func RecoverEtcdNodes(ctx context.Context, etcdHosts []*hosts.Host, dialerFactory hosts.DialerFactory, clusterPrefixPath string) error {
+	log.Infof(ctx, "[reconcile] Check for stopped [etcd] containers")
+	oldEtcdContainerName := "old-" + EtcdContainerName
+	for _, host := range etcdHosts {
+		if err := host.TunnelUp(ctx, dialerFactory, clusterPrefixPath); err != nil {
+			return fmt.Errorf("Not able to reach the host: %v", err)
+		}
+		etcdCont, err := host.DClient.ContainerInspect(ctx, EtcdContainerName)
+		if err != nil {
+			if !client.IsErrNotFound(err) {
+				return err
+			}
+			log.Infof(ctx, "[reconcile] etcd container not found on host [%s], checking for [old-etcd] container", host.Address)
+			// etcd container not found check for old etcd container
+			if err := renameAndStartEtcd(ctx, host, oldEtcdContainerName); err != nil {
+				return err
+			}
+			continue
+		}
+		// etcd container found check if stopped
+		if etcdCont.State.Status == "exited" || etcdCont.State.Status == "dead" {
+			log.Infof(ctx, "[reconcile] stopped [etcd] container found on host [%s], starting container", host.Address)
+			if err := docker.StartContainer(ctx, host.DClient, host.Address, EtcdContainerName); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func renameAndStartEtcd(ctx context.Context, etcdHost *hosts.Host, oldEtcdContainerName string) error {
+	_, err := etcdHost.DClient.ContainerInspect(ctx, oldEtcdContainerName)
+	if err != nil {
+		if !client.IsErrNotFound(err) {
+			return err
+		}
+		// old container not found, return nil
+		return nil
+	}
+	log.Infof(ctx, "[reconcile] stopped old-etcd container found on host [%s], starting container", etcdHost.Address)
+	if err := docker.RenameContainer(ctx, etcdHost.DClient, etcdHost.Address, oldEtcdContainerName, EtcdContainerName); err != nil {
+		return err
+	}
+	return docker.StartContainer(ctx, etcdHost.DClient, etcdHost.Address, EtcdContainerName)
 }
