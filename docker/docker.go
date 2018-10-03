@@ -146,7 +146,6 @@ func DoRollingUpdateContainer(ctx context.Context, dClient *client.Client, image
 	if err := StopRenameContainer(ctx, dClient, hostname, containerName, oldContainerName); err != nil {
 		return err
 	}
-	return fmt.Errorf("tunnel disconnect")
 	logrus.Debugf("[%s] Successfully stopped old container %s on host [%s]", plane, containerName, hostname)
 	_, err = CreateContainer(ctx, dClient, hostname, containerName, imageCfg, hostCfg)
 	if err != nil {
