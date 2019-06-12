@@ -9,12 +9,13 @@ import (
 	"github.com/rancher/rke/log"
 	"github.com/rancher/rke/pki"
 	"github.com/rancher/rke/services"
-	"github.com/rancher/types/apis/management.cattle.io/v3"
+	v3 "github.com/rancher/types/apis/management.cattle.io/v3"
 	"github.com/urfave/cli"
 	"k8s.io/client-go/util/cert"
 )
 
 func CertificateCommand() cli.Command {
+
 	return cli.Command{
 		Name:  "cert",
 		Usage: "Certificates management for RKE cluster",
@@ -24,6 +25,10 @@ func CertificateCommand() cli.Command {
 				Usage:  "Rotate RKE cluster certificates",
 				Action: rotateRKECertificatesFromCli,
 				Flags: []cli.Flag{
+					cli.BoolFlag{
+						Name:  "ignore-docker-version",
+						Usage: "Disable Docker version check",
+					},
 					cli.StringFlag{
 						Name:   "config",
 						Usage:  "Specify an alternate cluster YAML file",
