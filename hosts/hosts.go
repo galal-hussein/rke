@@ -3,6 +3,7 @@ package hosts
 import (
 	"context"
 	"fmt"
+	"golang.org/x/crypto/ssh"
 	"path"
 	"strings"
 
@@ -38,6 +39,7 @@ type Host struct {
 	UpdateWorker        bool
 	PrefixPath          string
 	BastionHost         v3.BastionHost
+	SSHClient           *ssh.Client
 }
 
 const (

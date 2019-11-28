@@ -155,6 +155,7 @@ func (d *dialer) Dial(network, addr string) (net.Conn, error) {
 		network = d.netConn
 	}
 
+
 	remote, err := conn.Dial(network, addr)
 	if err != nil {
 		if strings.Contains(err.Error(), "connect failed") {

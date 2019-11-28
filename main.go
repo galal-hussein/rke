@@ -54,6 +54,7 @@ func mainErr() error {
 		cmd.EtcdCommand(),
 		cmd.CertificateCommand(),
 		cmd.EncryptionCommand(),
+		cmd.UpQuickCommand(),
 	}
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{

@@ -1,6 +1,7 @@
 package hosts
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -60,6 +61,22 @@ func (h *Host) TunnelUpLocal(ctx context.Context, clusterVersion string) error {
 		return fmt.Errorf("Can't initiate NewClient: %v", err)
 	}
 	return checkDockerVersion(ctx, h, clusterVersion)
+}
+
+func (h *Host) TunnelUpDirect(ctx context.Context) error {
+	if h.SSHClient != nil {
+		return nil
+	}
+	directDialer, err := newDialer(h, "direct")
+	if err != nil {
+		return err
+	}
+	sshConn, err := directDialer.getSSHTunnelConnection()
+	if err != nil {
+		return err
+	}
+	h.SSHClient = sshConn
+	return nil
 }
 
 func checkDockerVersion(ctx context.Context, h *Host, clusterVersion string) error {
@@ -170,4 +187,23 @@ func userHome() string {
 		return homeDrive + homePath
 	}
 	return os.Getenv("USERPROFILE")
+}
+
+func (h *Host) ExecuteDirectCommand(ctx context.Context,cmd string) (error) {
+	if h.SSHClient == nil {
+		if err := h.TunnelUpDirect(ctx); err != nil {
+			return err
+		}
+	}
+	session, _ := h.SSHClient.NewSession()
+	defer session.Close()
+
+	var stdoutBuf bytes.Buffer
+	session.Stdout = &stdoutBuf
+	err := session.Run(cmd)
+	if err != nil {
+		return err
+	}
+	log.Infof(ctx,"Output of %s command on host [%s]: %s", cmd, h.Address, stdoutBuf.String())
+	return nil
 }
